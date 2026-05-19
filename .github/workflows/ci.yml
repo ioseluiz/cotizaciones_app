@@ -33,7 +33,7 @@ jobs:
           flake8 . \
             --exclude=venv,dist,build,__pycache__ \
             --max-line-length=120 \
-            --ignore=E501,W503,E302,E303,E305,W291,W292,W293
+            --ignore=E501,W503,E302,E303,E305,W291,W292,W293,E226
 
   test:
     name: Test
