@@ -1,13 +1,11 @@
-import os
 import urllib.parse
-from PyQt6.QtCore import QObject, pyqtSignal, QUrl
+from PyQt6.QtCore import QObject, QUrl
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog
-from PyQt6.QtGui import QColor, QDesktopServices
+from PyQt6.QtGui import QDesktopServices
 from models.quote_model import QuoteModel
 from models.client_model import ClientModel
 from views.quotes_view import QuotesView
 from utils.pdf_generator import PDFGenerator
-from utils.email_sender import EmailSender
 from utils.email_worker import EmailWorker
 
 
@@ -114,7 +112,7 @@ class QuotesPresenter(QObject):
             )
             try:
                 precio = float(precio_str)
-            except:
+            except ValueError:
                 precio = 0.0
 
             if servicio:

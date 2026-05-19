@@ -11,7 +11,7 @@ def main():
     db = Database()
     
     view = MainWindow()
-    presenter = MainPresenter(view, db)
+    _presenter = MainPresenter(view, db)  # noqa: F841 — kept alive to prevent GC
     
     view.show()
     sys.exit(app.exec())

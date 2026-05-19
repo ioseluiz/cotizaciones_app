@@ -24,7 +24,7 @@ def set_db_path(new_path):
         with open(CONFIG_FILE, 'r') as f:
             try:
                 config = json.load(f)
-            except:
+            except Exception:
                 pass
     config["db_path"] = new_path
     with open(CONFIG_FILE, 'w') as f:

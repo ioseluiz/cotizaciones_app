@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem, 
+    QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
     QPushButton, QLineEdit, QLabel, QMessageBox, QHeaderView
 )
 

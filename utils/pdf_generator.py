@@ -1,4 +1,3 @@
-import os
 import jinja2
 from PyQt6.QtGui import QTextDocument, QPageLayout, QPageSize, QFont
 from PyQt6.QtPrintSupport import QPrinter
