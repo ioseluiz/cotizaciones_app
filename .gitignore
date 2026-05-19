@@ -1,0 +1,48 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Distribución y build
+dist/
+build/
+*.spec.bak
+
+# Base de datos (runtime, no commitear)
+*.db
+
+# Configuración local del usuario (rutas absolutas locales)
+config.json
+
+# PDFs generados (temporales/tests)
+*.pdf
+
+# Inno Setup output
+installer/windows/Output/
+
+# Archivos de sistema
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Variables de entorno
+.env
+.env.local
+
+# Logs
+*.log

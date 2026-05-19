@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body { 
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; 
+        color: #2D3748; 
+        line-height: 1.2; 
+        margin: 0; 
+        padding: 0;
+    }
+    
+    .header { 
+        text-align: center; 
+        border-bottom: 2px solid #1A365D; 
+        padding-bottom: 5px; 
+        margin-bottom: 10px; 
+    }
+    .header h1 { margin: 0; color: #1A365D; font-size: 16px; letter-spacing: 1px; }
+    .header h2 { margin: 2px 0; font-size: 12px; color: #4A5568; }
+    .header p { margin: 0; font-size: 10px; color: #718096; }
+    
+    .info-table { 
+        width: 100%; 
+        margin-bottom: 10px; 
+        border-collapse: collapse; 
+        border: 1px solid #E2E8F0;
+    }
+    .info-table td { padding: 4px 8px; border: 1px solid #E2E8F0; font-size: 11px; }
+    .info-table .label { font-weight: bold; width: 12%; color: #1A365D; background-color: #EDF2F7; }
+    
+    .items-table { 
+        width: 100%; 
+        border-collapse: collapse; 
+        margin-bottom: 10px; 
+    }
+    .items-table th { background-color: #1A365D; color: white; padding: 6px; text-align: center; font-size: 11px; border: 1px solid #1A365D; }
+    .items-table td { border: 1px solid #CBD5E0; padding: 6px; font-size: 11px; }
+    .items-table tr:nth-child(even) { background-color: #F7FAFC; }
+    
+    .total-row { font-weight: bold; background-color: #EDF2F7; font-size: 12px; color: #1A365D; }
+    .total-row td { text-align: right; border-top: 2px solid #1A365D; padding: 6px; }
+    
+    .obs-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+    .obs-table th { background-color: #1A365D; color: white; text-align: left; padding: 4px 8px; font-size: 11px; border: 1px solid #1A365D; text-transform: uppercase; }
+    .obs-table td { border: 1px solid #CBD5E0; padding: 8px; background-color: #F7FAFC; font-size: 10px; color: #4A5568; }
+
+    .signatures { width: 100%; margin-top: 25px; text-align: center; border-collapse: collapse; }
+    .signatures td { vertical-align: bottom; }
+    .sig-col { width: 40%; }
+    .spacer-col { width: 10%; }
+    .sig-line { border-bottom: 1px solid #000000; height: 25px; margin-bottom: 4px; }
+    .sig-name { font-weight: bold; font-size: 10px; color: #1A365D; }
+    
+    .footer { text-align: center; font-size: 10px; color: #A0AEC0; margin-top: 15px; border-top: 1px solid #E2E8F0; padding-top: 5px; }
+</style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>ING. JOSE LUIS MUÑOZ</h1>
+        <h2>{{ tipo }}</h2>
+        <p>RUC: 8-791-273 | D.V. 94</p>
+    </div>
+
+    <table class="info-table" width="100%">
+        <tr>
+            <td class="label">Cotización #:</td>
+            <td style="width: 38%;">{{ quote_id }}</td>
+            <td class="label">Fecha:</td>
+            <td style="width: 38%;">{{ fecha }}</td>
+        </tr>
+        <tr>
+            <td class="label">Cliente:</td>
+            <td>{{ client_name }}</td>
+            <td class="label">Proyecto:</td>
+            <td>{{ proyecto }}</td>
+        </tr>
+    </table>
+
+    <table class="items-table" width="100%">
+        <thead>
+            <tr><th style="width: 25%;">Servicio</th><th style="width: 55%;">Descripción</th><th style="width: 20%;">Precio Total</th></tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item[1] }}</td>
+                <td>{{ item[2] }}</td>
+                <td style="text-align: right;">${{ "%.2f"|format(item[3]) }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td colspan="2">GRAN TOTAL:</td>
+                <td>${{ total }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="obs-table" width="100%">
+        <tr><th>Observaciones y Condiciones</th></tr>
+        <tr><td>{{ observaciones }}</td></tr>
+    </table>
+
+    <table class="signatures" width="100%">
+        <tr>
+            <td class="spacer-col"></td>
+            <td class="sig-col">
+                <div class="sig-line"></div>
+                <div class="sig-name">Aprobado por Cliente</div>
+            </td>
+            <td class="spacer-col"></td>
+            <td class="sig-col">
+                <div class="sig-line"></div>
+                <div class="sig-name">Ing. Jose Luis Munoz</div>
+            </td>
+            <td class="spacer-col"></td>
+        </tr>
+    </table>
+
+    <div class="footer">
+        Email: joseluism1412@gmail.com | Teléfono: 64998718
+    </div>
+
+</body>
+</html>
