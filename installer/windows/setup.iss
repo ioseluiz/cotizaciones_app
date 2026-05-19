@@ -19,6 +19,7 @@ AppUpdatesURL={#AppURL}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
+SetupIconFile=app.ico
 LicenseFile=
 ; OutputDir se puede sobreescribir con /O desde CLI
 OutputDir=Output
@@ -38,7 +39,7 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\..\dist\CotizacionesApp.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\CotizacionesApp\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

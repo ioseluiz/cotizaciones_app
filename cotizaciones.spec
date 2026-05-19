@@ -10,6 +10,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('templates', 'templates'),
+        ('assets', 'assets'),
     ],
     hiddenimports=[
         'PyQt6.QtCore',
@@ -28,6 +29,12 @@ a = Analysis(
         'openpyxl',
         'PIL',
         'jinja2',
+        'email',
+        'email.mime',
+        'email.mime.multipart',
+        'email.mime.text',
+        'email.mime.application',
+        'smtplib',
     ],
     hookspath=[],
     hooksconfig={},
@@ -37,9 +44,6 @@ a = Analysis(
         'weasyprint',
         'tkinter',
         'unittest',
-        'email',
-        'http',
-        'xml',
         'pydoc',
     ],
     win_no_prefer_redirects=False,
@@ -50,32 +54,39 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Windows: single .exe file
+# ── Windows: onedir (carpeta dist/CotizacionesApp/) ───────────────────────────
 if sys.platform == 'win32':
     exe = EXE(
         pyz,
         a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
         [],
+        exclude_binaries=True,
         name='CotizacionesApp',
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
         upx=True,
-        upx_exclude=[],
-        runtime_tmpdir=None,
         console=False,
         disable_windowed_traceback=False,
         argv_emulation=False,
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
-        # icon='installer/windows/app.ico',  # Agrega un .ico cuando tengas el ícono
+        icon='installer/windows/app.ico',
     )
 
-# macOS: .app bundle
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=True,
+        upx_exclude=[],
+        name='CotizacionesApp',
+    )
+
+# ── macOS: .app bundle ────────────────────────────────────────────────────────
 else:
     exe = EXE(
         pyz,
@@ -93,7 +104,7 @@ else:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
-        # icon='installer/mac/app.icns',  # Agrega un .icns cuando tengas el ícono
+        icon='installer/mac/app.icns',
     )
 
     coll = COLLECT(
@@ -110,7 +121,7 @@ else:
     app = BUNDLE(
         coll,
         name='CotizacionesApp.app',
-        # icon='installer/mac/app.icns',
+        icon='installer/mac/app.icns',
         bundle_identifier='com.joseluismunoz.cotizacionesapp',
         info_plist={
             'CFBundleShortVersionString': os.environ.get('APP_VERSION', '1.0.0'),
