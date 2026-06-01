@@ -1,7 +1,8 @@
+import subprocess
 import urllib.parse
-from PyQt6.QtCore import QObject, QUrl
+from PyQt6.QtCore import QObject, QUrl, QMimeData
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QDesktopServices, QGuiApplication
 from models.quote_model import QuoteModel
 from models.client_model import ClientModel
 from views.quotes_view import QuotesView
@@ -290,12 +291,33 @@ class QuotesPresenter(QObject):
             # Generar y guardar el PDF localmente
             generator = PDFGenerator()
             generator.generate(quote, items, file_path)
-            self.view.show_info(
-                f"PDF Guardado Exitosamente en:\n{file_path}\n\nSe abrirá WhatsApp Web. Arrastre este archivo al chat para enviarlo."
-            )
         except Exception as e:
             self.view.show_error(f"Error al generar PDF: {str(e)}")
             return
+
+        # Copiar el PDF al portapapeles como archivo para que el usuario solo
+        # tenga que pegarlo (Ctrl+V) dentro del chat de WhatsApp Web.
+        try:
+            mime = QMimeData()
+            mime.setUrls([QUrl.fromLocalFile(file_path)])
+            QGuiApplication.clipboard().setMimeData(mime)
+        except Exception:
+            pass  # Si falla el portapapeles, queda el Explorador como respaldo.
+
+        # Abrir el Explorador con el PDF preseleccionado (respaldo para arrastrarlo).
+        try:
+            subprocess.Popen(["explorer", "/select,", file_path])
+        except Exception:
+            pass
+
+        self.view.show_info(
+            "PDF guardado en:\n"
+            f"{file_path}\n\n"
+            "Para enviarlo por WhatsApp:\n"
+            "1. Se abrirá WhatsApp Web con el mensaje listo.\n"
+            "2. El PDF ya está copiado: pulse Ctrl+V dentro del chat para adjuntarlo.\n"
+            "3. Si no se pega, arrastre el archivo desde la carpeta que se abrió."
+        )
 
         # Limpiar el número de teléfono para la URL (remover espacios, guiones, etc.)
         celular_limpio = "".join(filter(str.isdigit, celular))

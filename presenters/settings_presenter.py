@@ -4,9 +4,8 @@ import keyring
 from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QFileDialog
 from views.settings_view import SettingsView
-from models.database import Database
+from models.database import Database, get_config_path
 
-CONFIG_FILE = "config.json"
 KEYRING_SERVICE = "CotizacionesApp"
 KEYRING_ACCOUNT = "gmail_app_password"
 
@@ -48,12 +47,13 @@ class SettingsPresenter(QObject):
             self.view.show_info("Contraseña de aplicación guardada exitosamente y de forma segura en el Llavero del sistema.")
             
             # Limpiar la contraseña antigua de config.json si existe
-            if os.path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, 'r') as f:
+            config_file = get_config_path()
+            if os.path.exists(config_file):
+                with open(config_file, 'r') as f:
                     config = json.load(f)
                 if "email_app_password" in config:
                     del config["email_app_password"]
-                    with open(CONFIG_FILE, 'w') as f:
+                    with open(config_file, 'w') as f:
                         json.dump(config, f)
         except Exception as e:
             self.view.show_error(f"Error al guardar la configuración: {str(e)}")

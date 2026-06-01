@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-06-01
+
+### Changed
+- La base de datos y la configuración ahora se guardan en una carpeta estable por
+  usuario (`%APPDATA%\CotizacionesApp` en Windows). Así los datos se conservan al
+  instalar, actualizar o desinstalar el ejecutable. La base de datos existente se
+  migra automáticamente la primera vez que se abre esta versión.
+
+### Fixed
+- Envío por WhatsApp: el PDF ahora se copia al portapapeles para pegarlo (Ctrl+V)
+  en el chat y se abre el Explorador con el archivo seleccionado, en lugar de
+  pedir al usuario que lo busque manualmente.
+
 ## [1.0.1] - 2026-05-18
 
 ### Fixed
