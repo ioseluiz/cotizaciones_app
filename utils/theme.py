@@ -31,11 +31,11 @@ SUCCESS = "#16A34A"
 ACCENTS = {
     "ESTRUCTURAL": {
         "base": "#1E3A8A", "hover": "#1E40AF", "pressed": "#172554",
-        "soft": "#DBEAFE", "sidebar": "#172554", "sidebar_alt": "#1E3A8A",
+        "soft": "#DBEAFE", "tint": "#EFF6FF", "sidebar": "#172554", "sidebar_alt": "#1E3A8A",
     },
     "SOFTWARE": {
         "base": "#0F766E", "hover": "#0D9488", "pressed": "#115E59",
-        "soft": "#CCFBF1", "sidebar": "#134E4A", "sidebar_alt": "#0F766E",
+        "soft": "#CCFBF1", "tint": "#F0FDFA", "sidebar": "#134E4A", "sidebar_alt": "#0F766E",
     },
 }
 DEFAULT_ACCENT = ACCENTS["ESTRUCTURAL"]

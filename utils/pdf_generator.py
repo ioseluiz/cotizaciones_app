@@ -5,11 +5,14 @@ from PyQt6.QtPrintSupport import QPrinter
 from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
 from utils.resource_path import resource_path
 from models.business_model import format_quote_number
+from utils.theme import accent_for
+from utils.formatting import money, fmt_date
 
 class PDFGenerator:
     def __init__(self):
         template_dir = resource_path('templates')
         self.env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
+        self.env.filters["money"] = money
 
     def generate(self, quote_data, items_data, output_path, deliverables=None, business=None):
         """quote_data: fila de QuoteModel.get_quote_by_id. business: dict de BusinessModel.get."""
@@ -20,6 +23,10 @@ class PDFGenerator:
         numero = quote_data[9] if len(quote_data) > 9 and quote_data[9] else quote_data[0]
         quote_number = format_quote_number(prefijo, numero) if prefijo else str(numero).zfill(4)
 
+        # Color del negocio (azul marino Estructural / verde azulado Software)
+        clave = business.get("clave") or (quote_data[8] if len(quote_data) > 8 else None)
+        accent = accent_for(clave)
+
         logo_path = business.get("logo_path") or ""
         logo_url = QUrl.fromLocalFile(logo_path).toString() if logo_path and os.path.exists(logo_path) else ""
 
@@ -27,18 +34,20 @@ class PDFGenerator:
             quote_id=quote_number,
             client_name=quote_data[1],
             tipo=business.get("encabezado_titulo") or quote_data[2],
-            fecha=quote_data[3],
+            fecha=fmt_date(quote_data[3]),
             proyecto=quote_data[4],
             observaciones=quote_data[5] if quote_data[5] else "",
             items=items_data,
             deliverables=deliverables or [],
-            total=f"{total:.2f}",
+            total=money(total),
             encabezado_nombre=business.get("encabezado_nombre") or "",
             ruc=business.get("ruc") or "",
             email=business.get("email") or "",
             telefono=business.get("telefono") or "",
             firma=business.get("firma") or "",
             logo_url=logo_url,
+            accent=accent["base"],
+            accent_tint=accent["tint"],
         )
 
         document = QTextDocument()
