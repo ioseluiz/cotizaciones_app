@@ -67,7 +67,7 @@ class SettingsPresenter(QObject):
             return
         self.load_business()
         self.business_changed_signal.emit()
-        self.view.show_info("Datos del negocio guardados")
+        self.view.show_toast("Datos del negocio guardados")
 
     def update_path_display(self):
         self.view.db_path_input.setText(self.db.db_path)
@@ -111,7 +111,7 @@ class SettingsPresenter(QObject):
             try:
                 self.db.move_db(new_dir)
                 self.update_path_display()
-                self.view.show_info("Base de datos movida exitosamente.")
+                self.view.show_toast("Base de datos movida")
             except Exception as e:
                 self.view.show_error(f"Error al mover la base de datos: {str(e)}")
 
@@ -120,6 +120,6 @@ class SettingsPresenter(QObject):
         if file_path:
             try:
                 self.db.backup_db(file_path)
-                self.view.show_info("Backup creado exitosamente.")
+                self.view.show_toast("Backup creado")
             except Exception as e:
                 self.view.show_error(f"Error al crear backup: {str(e)}")

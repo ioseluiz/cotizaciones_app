@@ -1,119 +1,189 @@
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel, QMessageBox,
-    QGroupBox, QFormLayout, QTextEdit, QScrollArea,
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QGroupBox, QFormLayout, QTextEdit, QScrollArea,
+    QTabWidget, QFrame,
 )
 
+from views.widgets import Page, make_button, make_label
 
-class SettingsView(QWidget):
+PLACEHOLDERS_HINT = "Puede usar {cliente}, {proyecto} y {numero}; se reemplazan al enviar."
+
+
+def _scroll(widget):
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.Shape.NoFrame)
+    widget.setObjectName("pageContent")
+    area.setWidget(widget)
+    return area
+
+
+def _form(box):
+    form = QFormLayout(box)
+    form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+    form.setVerticalSpacing(10)
+    form.setHorizontalSpacing(14)
+    return form
+
+
+class SettingsView(Page):
     def __init__(self):
         super().__init__()
         self.init_ui()
 
     def init_ui(self):
-        outer = QVBoxLayout(self)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content = QWidget()
-        layout = QVBoxLayout(content)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 0)
+        root.setSpacing(6)
+        self.title_label = make_label("Configuración", "title")
+        root.addWidget(self.title_label)
+        root.addWidget(make_label("Los datos de Negocio y Mensajes aplican solo al negocio seleccionado.", "muted"))
 
-        # Grupo Negocio activo
-        self.business_group = QGroupBox("Datos del negocio")
-        form = QFormLayout()
-        info = QLabel(
-            "Estos datos aplican solo al negocio seleccionado arriba. En los mensajes puede usar "
-            "{cliente}, {proyecto} y {numero}."
-        )
-        info.setWordWrap(True)
-        form.addRow(info)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(_scroll(self._build_business_tab()), "Negocio")
+        self.tabs.addTab(_scroll(self._build_messages_tab()), "Mensajes")
+        self.tabs.addTab(_scroll(self._build_system_tab()), "Sistema")
+        root.addWidget(self.tabs, 1)
 
+        # Barra de guardado (solo en las pestañas del negocio)
+        self.save_bar = QFrame()
+        self.save_bar.setObjectName("actionBar")
+        bar = QHBoxLayout(self.save_bar)
+        bar.setContentsMargins(0, 10, 0, 10)
+        bar.addStretch()
+        self.save_business_btn = make_button("Guardar datos del negocio", "primary", "save", "Ctrl+S")
+        bar.addWidget(self.save_business_btn)
+        root.addWidget(self.save_bar)
+        self.tabs.currentChanged.connect(lambda i: self.save_bar.setVisible(i in (0, 1)))
+
+    # ------------------------------------------------------------- pestañas
+    def _build_business_tab(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 12, 0, 12)
+        lay.setSpacing(14)
         self.business_inputs = {}
+
+        ident = QGroupBox("Identidad")
+        form = _form(ident)
+        for key, label, placeholder in (
+            ("nombre", "Nombre del negocio", "Ingeniería Estructural"),
+            ("prefijo", "Prefijo de numeración", "EST"),
+        ):
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            self.business_inputs[key] = edit
+            form.addRow(label, edit)
+        self.business_inputs["prefijo"].setMaxLength(6)
+        self.business_inputs["prefijo"].setMaximumWidth(120)
+        form.addRow(make_label("Las cotizaciones se numeran como PREFIJO-0001.", "muted"))
+        lay.addWidget(ident)
+
+        pdf = QGroupBox("Encabezado y pie del PDF")
+        form = _form(pdf)
         for key, label in (
-            ("nombre", "Nombre del negocio:"),
-            ("prefijo", "Prefijo de numeración:"),
-            ("encabezado_nombre", "Encabezado del PDF (nombre):"),
-            ("encabezado_titulo", "Encabezado del PDF (título):"),
-            ("ruc", "RUC / línea legal:"),
-            ("email", "Email de contacto:"),
-            ("telefono", "Teléfono:"),
-            ("firma", "Nombre en la firma:"),
+            ("encabezado_nombre", "Nombre"),
+            ("encabezado_titulo", "Título / profesión"),
+            ("ruc", "RUC / línea legal"),
+            ("email", "Email de contacto"),
+            ("telefono", "Teléfono"),
+            ("firma", "Nombre en la firma"),
         ):
             edit = QLineEdit()
             self.business_inputs[key] = edit
             form.addRow(label, edit)
-        self.business_inputs["prefijo"].setMaxLength(6)
-
-        logo_layout = QHBoxLayout()
+        logo_row = QHBoxLayout()
         self.logo_input = QLineEdit()
-        self.logo_input.setPlaceholderText("(sin logo)")
-        self.logo_browse_btn = QPushButton("Buscar...")
-        self.logo_clear_btn = QPushButton("Quitar")
-        logo_layout.addWidget(self.logo_input)
-        logo_layout.addWidget(self.logo_browse_btn)
-        logo_layout.addWidget(self.logo_clear_btn)
-        form.addRow("Logo (PDF):", logo_layout)
+        self.logo_input.setPlaceholderText("Sin logo")
+        self.logo_input.setReadOnly(True)
+        self.logo_browse_btn = make_button("Elegir...", None, "folder")
+        self.logo_clear_btn = make_button("", "ghost", "x", "Quitar logo")
+        logo_row.addWidget(self.logo_input, 1)
+        logo_row.addWidget(self.logo_browse_btn)
+        logo_row.addWidget(self.logo_clear_btn)
+        form.addRow("Logo", logo_row)
+        lay.addWidget(pdf)
 
+        cond = QGroupBox("Condiciones por defecto")
+        clay = QVBoxLayout(cond)
+        clay.addWidget(make_label("Se cargan en las observaciones de cada cotización nueva.", "muted"))
         self.conditions_edit = QTextEdit()
         self.conditions_edit.setAcceptRichText(True)
-        self.conditions_edit.setMaximumHeight(110)
-        form.addRow("Condiciones por defecto:", self.conditions_edit)
+        self.conditions_edit.setMinimumHeight(110)
+        clay.addWidget(self.conditions_edit)
+        lay.addWidget(cond)
+        lay.addStretch()
+        return page
 
+    def _build_messages_tab(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 12, 0, 12)
+        lay.setSpacing(14)
+        lay.addWidget(make_label(PLACEHOLDERS_HINT, "muted"))
+
+        email = QGroupBox("Correo electrónico")
+        form = _form(email)
         self.email_subject_input = QLineEdit()
-        form.addRow("Asunto del correo:", self.email_subject_input)
+        form.addRow("Asunto", self.email_subject_input)
         self.email_body_edit = QTextEdit()
         self.email_body_edit.setAcceptRichText(False)
-        self.email_body_edit.setMaximumHeight(130)
-        form.addRow("Cuerpo del correo:", self.email_body_edit)
+        self.email_body_edit.setMinimumHeight(150)
+        form.addRow("Mensaje", self.email_body_edit)
+        lay.addWidget(email)
+
+        wa = QGroupBox("WhatsApp")
+        wlay = QVBoxLayout(wa)
         self.whatsapp_edit = QTextEdit()
         self.whatsapp_edit.setAcceptRichText(False)
-        self.whatsapp_edit.setMaximumHeight(130)
-        form.addRow("Mensaje de WhatsApp:", self.whatsapp_edit)
+        self.whatsapp_edit.setMinimumHeight(150)
+        wlay.addWidget(self.whatsapp_edit)
+        lay.addWidget(wa)
+        lay.addStretch()
+        return page
 
-        self.save_business_btn = QPushButton("Guardar datos del negocio")
-        form.addRow(self.save_business_btn)
-        self.business_group.setLayout(form)
-        layout.addWidget(self.business_group)
+    def _build_system_tab(self):
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 12, 0, 12)
+        lay.setSpacing(14)
 
-        # Grupo Base de Datos
-        db_group = QGroupBox("Gestión de Base de Datos")
-        db_layout = QVBoxLayout()
-        path_layout = QHBoxLayout()
-        path_layout.addWidget(QLabel("Ruta Actual de la BD:"))
+        db = QGroupBox("Base de datos")
+        dlay = QVBoxLayout(db)
+        dlay.addWidget(make_label("Ubicación actual", "muted"))
         self.db_path_input = QLineEdit()
         self.db_path_input.setReadOnly(True)
-        path_layout.addWidget(self.db_path_input)
-        db_layout.addLayout(path_layout)
-        btn_layout = QHBoxLayout()
-        self.move_db_btn = QPushButton("Mover Base de Datos...")
-        self.backup_db_btn = QPushButton("Crear Backup de Base de Datos...")
-        btn_layout.addWidget(self.move_db_btn)
-        btn_layout.addWidget(self.backup_db_btn)
-        db_layout.addLayout(btn_layout)
-        db_group.setLayout(db_layout)
-        layout.addWidget(db_group)
+        dlay.addWidget(self.db_path_input)
+        btns = QHBoxLayout()
+        self.backup_db_btn = make_button("Crear backup...", None, "download")
+        self.move_db_btn = make_button("Mover base de datos...", None, "folder")
+        btns.addWidget(self.backup_db_btn)
+        btns.addWidget(self.move_db_btn)
+        btns.addStretch()
+        dlay.addLayout(btns)
+        lay.addWidget(db)
 
-        # Grupo Email
-        email_group = QGroupBox("Configuración de Correo (Gmail)")
-        email_layout = QVBoxLayout()
-        email_info = QLabel("Para enviar correos, debes usar una 'Contraseña de Aplicación' de Gmail, no tu contraseña normal.")
-        email_info.setWordWrap(True)
-        email_layout.addWidget(email_info)
-        pass_layout = QHBoxLayout()
-        pass_layout.addWidget(QLabel("Contraseña de App:"))
+        mail = QGroupBox("Cuenta de Gmail para envíos")
+        mlay = QVBoxLayout(mail)
+        info = make_label(
+            "Use una 'Contraseña de aplicación' de Gmail (no su contraseña normal). "
+            "Se guarda de forma segura en el llavero de Windows.", "muted")
+        info.setWordWrap(True)
+        mlay.addWidget(info)
+        row = QHBoxLayout()
         self.app_password_input = QLineEdit()
         self.app_password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        pass_layout.addWidget(self.app_password_input)
-        email_layout.addLayout(pass_layout)
-        self.save_email_btn = QPushButton("Guardar Contraseña")
-        email_layout.addWidget(self.save_email_btn)
-        email_group.setLayout(email_layout)
-        layout.addWidget(email_group)
+        self.app_password_input.setPlaceholderText("xxxx xxxx xxxx xxxx")
+        row.addWidget(self.app_password_input, 1)
+        self.save_email_btn = make_button("Guardar contraseña", None, "save")
+        row.addWidget(self.save_email_btn)
+        mlay.addLayout(row)
+        lay.addWidget(mail)
+        lay.addStretch()
+        return page
 
-        layout.addStretch()
-        scroll.setWidget(content)
-        outer.addWidget(scroll)
-
+    # ------------------------------------------------------------------ API
     def set_business_data(self, data):
-        self.business_group.setTitle(f"Datos del negocio: {data.get('nombre', '')}")
+        self.title_label.setText(f"Configuración · {data.get('nombre', '')}")
         for key, edit in self.business_inputs.items():
             edit.setText(data.get(key) or "")
         self.logo_input.setText(data.get("logo_path") or "")
@@ -132,8 +202,5 @@ class SettingsView(QWidget):
         data["whatsapp_mensaje"] = self.whatsapp_edit.toPlainText()
         return data
 
-    def show_error(self, message):
-        QMessageBox.critical(self, "Error", message)
-
-    def show_info(self, message):
-        QMessageBox.information(self, "Información", message)
+    def shortcut_targets(self):
+        return {"save": self.save_business_btn}

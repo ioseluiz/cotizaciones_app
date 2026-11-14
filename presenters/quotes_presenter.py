@@ -1,4 +1,6 @@
+import os
 import subprocess
+import tempfile
 import urllib.parse
 from PyQt6.QtCore import QObject, QUrl, QMimeData, Qt, QDate
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog
@@ -6,7 +8,8 @@ from PyQt6.QtGui import QDesktopServices, QGuiApplication
 from models.quote_model import QuoteModel
 from models.client_model import ClientModel
 from models.business_model import BusinessModel, format_quote_number, render_message
-from views.quotes_view import QuotesView
+from views.quotes_view import QuotesView, COL_PRECIO
+from views.widgets import money, parse_number, numeric_item, fmt_date
 from utils.pdf_generator import PDFGenerator
 from utils.email_worker import EmailWorker
 
@@ -37,6 +40,7 @@ class QuotesPresenter(QObject):
         self.view.delete_quote_btn.clicked.connect(self.delete_quote)
         self.view.generate_pdf_btn.clicked.connect(self.generate_pdf)
         self.view.whatsapp_btn.clicked.connect(self.send_whatsapp)
+        self.view.preview_pdf_btn.clicked.connect(self.preview_pdf)
         self.context.changed.connect(self.on_business_changed)
 
         self.load_clients()
@@ -77,12 +81,28 @@ class QuotesPresenter(QObject):
             num_item = QTableWidgetItem(format_quote_number(prefijo, numero))
             num_item.setData(Qt.ItemDataRole.UserRole, quote_id)
             table.setItem(row, 0, num_item)
-            table.setItem(row, 1, QTableWidgetItem(fecha))
+            table.setItem(row, 1, QTableWidgetItem(fmt_date(fecha)))
             table.setItem(row, 2, QTableWidgetItem(cliente))
             table.setItem(row, 3, QTableWidgetItem(proyecto))
         table.blockSignals(False)
+        self.view.set_count(table.rowCount())
         if self.selected_quote_id:
             self._reselect(self.selected_quote_id)
+
+    def select_quote(self, quote_id):
+        """Selecciona y carga una cotización de la lista (si pertenece al negocio activo)."""
+        self.view.search_input.clear()
+        table = self.view.quotes_table
+        for row in range(table.rowCount()):
+            if table.item(row, 0).data(Qt.ItemDataRole.UserRole) == quote_id:
+                # Seleccionar sin depender de la señal (la fila puede estar ya seleccionada)
+                table.blockSignals(True)
+                table.selectRow(row)
+                table.blockSignals(False)
+                table.scrollToItem(table.item(row, 0))
+                self.load_quote(quote_id)
+                return True
+        return False
 
     def _reselect(self, quote_id):
         table = self.view.quotes_table
@@ -99,7 +119,9 @@ class QuotesPresenter(QObject):
         self.view.items_table.insertRow(row)
         self.view.items_table.setItem(row, 0, QTableWidgetItem(""))
         self.view.items_table.setItem(row, 1, QTableWidgetItem(""))
-        self.view.items_table.setItem(row, 2, QTableWidgetItem("0.0"))
+        self.view.items_table.setItem(row, COL_PRECIO, numeric_item("0.00"))
+        self.view.items_table.setCurrentCell(row, 0)
+        self.view.items_table.editItem(self.view.items_table.item(row, 0))
 
     def remove_item_row(self):
         current_row = self.view.items_table.currentRow()
@@ -110,13 +132,10 @@ class QuotesPresenter(QObject):
     def calculate_total(self):
         total = 0.0
         for row in range(self.view.items_table.rowCount()):
-            item = self.view.items_table.item(row, 2)
+            item = self.view.items_table.item(row, COL_PRECIO)
             if item:
-                try:
-                    total += float(item.text())
-                except ValueError:
-                    pass
-        self.view.total_label.setText(f"Gran Total: ${total:.2f}")
+                total += parse_number(item.text())
+        self.view.total_label.setText(money(total))
 
     # ------------------------------------------------------------------ guardar
     def save_quote(self):
@@ -138,11 +157,7 @@ class QuotesPresenter(QObject):
         for row in range(table.rowCount()):
             servicio = table.item(row, 0).text() if table.item(row, 0) else ""
             desc = table.item(row, 1).text() if table.item(row, 1) else ""
-            precio_str = table.item(row, 2).text() if table.item(row, 2) else "0"
-            try:
-                precio = float(precio_str)
-            except ValueError:
-                precio = 0.0
+            precio = parse_number(table.item(row, COL_PRECIO).text()) if table.item(row, COL_PRECIO) else 0.0
             if servicio:
                 items.append({"servicio": servicio, "descripcion": desc, "precio_total": precio})
 
@@ -152,19 +167,20 @@ class QuotesPresenter(QObject):
 
         try:
             if self.selected_quote_id:
-                self.quote_model.update_quote(
-                    self.selected_quote_id, client_data, fecha, proyecto, observaciones, items
-                )
-                self.view.show_info("Cotización actualizada")
+                quote_id = self.selected_quote_id
+                self.quote_model.update_quote(quote_id, client_data, fecha, proyecto, observaciones, items)
+                accion = "actualizada"
             else:
                 quote_id = self.quote_model.add_quote(
                     self.context.current, client_data, fecha, proyecto, observaciones, items
                 )
-                code = self.quote_code(self.quote_model.get_quote_by_id(quote_id))
-                self.view.show_info(f"Cotización {code} creada")
-
-            self.clear_form()
+                accion = "creada"
+            # Quedarse en la cotización guardada para poder enviarla de inmediato
+            self.selected_quote_id = quote_id
             self.load_quotes()
+            self.select_quote(quote_id)
+            code = self.quote_code(self.quote_model.get_quote_by_id(quote_id))
+            self.view.show_toast(f"Cotización {code} {accion}")
         except Exception as e:
             self.view.show_error(f"Error guardando cotización: {str(e)}")
 
@@ -176,12 +192,10 @@ class QuotesPresenter(QObject):
         self.view.observations_edit.setHtml(self.business().get("condiciones") or "")
         self.view.items_table.setRowCount(0)
         self.calculate_total()
-        self.view.number_label.setText("(nueva)")
-        self.view.save_btn.setText("Guardar Cotización")
+        self.view.set_mode(None)
+        self.view.quotes_table.blockSignals(True)
         self.view.quotes_table.clearSelection()
-        self.view.delete_quote_btn.setEnabled(False)
-        self.view.generate_pdf_btn.setEnabled(False)
-        self.view.whatsapp_btn.setEnabled(False)
+        self.view.quotes_table.blockSignals(False)
 
     def on_quote_selected(self):
         selected_items = self.view.quotes_table.selectedItems()
@@ -190,16 +204,18 @@ class QuotesPresenter(QObject):
             return
 
         row = selected_items[0].row()
-        self.selected_quote_id = self.view.quotes_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        self.load_quote(self.view.quotes_table.item(row, 0).data(Qt.ItemDataRole.UserRole))
 
-        quote = self.quote_model.get_quote_by_id(self.selected_quote_id)
+    def load_quote(self, quote_id):
+        """Carga la cotización en el formulario en modo edición."""
+        quote = self.quote_model.get_quote_by_id(quote_id)
         if not quote:
             return
+        self.selected_quote_id = quote_id
         index = self.view.client_combo.findData(quote[Q_CLIENTE_ID])
         if index >= 0:
             self.view.client_combo.setCurrentIndex(index)
 
-        self.view.number_label.setText(self.quote_code(quote))
         fecha = QDate.fromString(quote[Q_FECHA], "yyyy-MM-dd")
         if fecha.isValid():
             self.view.date_edit.setDate(fecha)
@@ -213,24 +229,26 @@ class QuotesPresenter(QObject):
             self.view.items_table.insertRow(r)
             self.view.items_table.setItem(r, 0, QTableWidgetItem(it[1]))
             self.view.items_table.setItem(r, 1, QTableWidgetItem(it[2]))
-            self.view.items_table.setItem(r, 2, QTableWidgetItem(str(it[3])))
+            self.view.items_table.setItem(r, COL_PRECIO, numeric_item(f"{it[3]:,.2f}"))
         self.view.items_table.blockSignals(False)
         self.calculate_total()
 
-        self.view.save_btn.setText("Actualizar Cotización")
-        self.view.delete_quote_btn.setEnabled(True)
-        self.view.generate_pdf_btn.setEnabled(True)
-        self.view.whatsapp_btn.setEnabled(True)
+        self.view.set_mode(self.quote_code(quote))
 
     def delete_quote(self):
         if not self.selected_quote_id:
+            return
+        quote = self.quote_model.get_quote_by_id(self.selected_quote_id)
+        code = self.quote_code(quote) if quote else ""
+        if not self.view.ask_yes_no(
+                f"¿Eliminar la cotización {code}?\n\nEsta acción no se puede deshacer.", "Eliminar cotización"):
             return
 
         try:
             self.quote_model.delete_quote(self.selected_quote_id)
             self.clear_form()
             self.load_quotes()
-            self.view.show_info("Cotización eliminada")
+            self.view.show_toast(f"Cotización {code} eliminada")
         except Exception as e:
             self.view.show_error(f"Error al eliminar cotización: {str(e)}")
 
@@ -258,6 +276,27 @@ class QuotesPresenter(QObject):
 
     def _message_values(self, quote):
         return {"cliente": quote[Q_CLIENTE], "proyecto": quote[Q_PROYECTO], "numero": self.quote_code(quote)}
+
+    def preview_pdf(self):
+        """Genera el PDF en una carpeta temporal y lo abre con el visor predeterminado."""
+        if not self.selected_quote_id:
+            return
+        quote = self.quote_model.get_quote_by_id(self.selected_quote_id)
+        if not quote:
+            return
+        path = os.path.join(tempfile.gettempdir(), f"Vista_previa_{self.quote_code(quote)}.pdf")
+        try:
+            PDFGenerator().generate(
+                quote,
+                self.quote_model.get_quote_items(quote[Q_ID]),
+                path,
+                self.quote_model.get_quote_deliverables(quote[Q_ID]),
+                self.business(quote[Q_NEGOCIO]),
+            )
+        except Exception as e:
+            self.view.show_error(f"Error al generar la vista previa: {e}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
 
     def generate_pdf(self):
         if not self.selected_quote_id:
@@ -290,15 +329,15 @@ class QuotesPresenter(QObject):
         self.email_worker = EmailWorker(client_email, file_path, subject, body)
         self.email_worker.finished_signal.connect(self.on_email_finished)
         self.view.generate_pdf_btn.setEnabled(False)
-        self.view.generate_pdf_btn.setText("Enviando Correo...")
+        self.view.generate_pdf_btn.setText("Enviando...")
         self.email_worker.start()
 
     def on_email_finished(self, success, message):
         self.view.generate_pdf_btn.setEnabled(True)
-        self.view.generate_pdf_btn.setText("Enviar por Correo")
+        self.view.generate_pdf_btn.setText("Correo")
 
         if success:
-            self.view.show_info(message)
+            self.view.show_toast(message)
         else:
             self.view.show_error(f"Error al enviar el correo: {message}")
 

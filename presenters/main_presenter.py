@@ -43,22 +43,21 @@ class MainPresenter:
         # Conectar señales para actualizar clientes en cotizaciones cuando hay cambios
         self.clients_presenter.client_changed_signal.connect(self.quotes_presenter.load_clients)
         self.clients_presenter.client_changed_signal.connect(self.estimator_presenter.load_clients)
-        self.estimator_presenter.quote_generated_signal.connect(self.quotes_presenter.load_quotes)
+        self.estimator_presenter.quote_generated_signal.connect(self.on_quote_generated)
         # Si cambian nombre/prefijo del negocio, refrescar selector y listados
         self.settings_presenter.business_changed_signal.connect(self.on_business_data_changed)
 
         self.view.business_combo.currentIndexChanged.connect(self.on_business_selected)
 
     def load_business_selector(self):
-        combo = self.view.business_combo
-        combo.blockSignals(True)
-        combo.clear()
-        for clave, nombre in self.business_model.get_all():
-            combo.addItem(nombre, userData=clave)
-        idx = combo.findData(self.context.current)
-        combo.setCurrentIndex(max(idx, 0))
-        combo.blockSignals(False)
-        self.view.apply_business(self.context.current, combo.currentText())
+        self.view.set_businesses(self.business_model.get_all(), self.context.current)
+        self.view.apply_business(self.context.current, self.view.business_combo.currentText())
+
+    def on_quote_generated(self, quote_id, open_now):
+        self.quotes_presenter.load_quotes()
+        if open_now:
+            self.view.navigate(0)
+            self.quotes_presenter.select_quote(quote_id)
 
     def on_business_selected(self, _index):
         clave = self.view.business_combo.currentData()

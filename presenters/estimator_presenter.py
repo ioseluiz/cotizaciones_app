@@ -21,13 +21,11 @@ from views.estimator_view import (
     COL_GASTO_MONTO,
 )
 from views.roles_dialog import RolesDialog
+from views.widgets import numeric_item, parse_number, fmt_date
 
 
 def _to_float(text):
-    try:
-        return float(str(text).strip().replace(",", ".") or 0)
-    except ValueError:
-        return 0.0
+    return parse_number(text)
 
 
 def _html_body(html):
@@ -37,7 +35,7 @@ def _html_body(html):
 
 
 class EstimatorPresenter(QObject):
-    quote_generated_signal = pyqtSignal()
+    quote_generated_signal = pyqtSignal(int, bool)  # (cotizacion_id, abrir_ahora)
 
     def __init__(self, view: EstimatorView, estimate_model: EstimateModel, role_model: RoleModel,
                  template_model: TemplateModel, quote_model: QuoteModel, client_model: ClientModel,
@@ -75,8 +73,11 @@ class EstimatorPresenter(QObject):
         v.save_btn.clicked.connect(self.save_estimate)
         v.clear_btn.clicked.connect(self.clear_form)
         v.generate_quote_btn.clicked.connect(self.generate_quote)
-        v.estimates_table.itemSelectionChanged.connect(self.on_estimate_selected)
+        v.open_estimates_btn.clicked.connect(self.open_estimates_dialog)
+        v.estimates_dialog.open_estimate_btn.clicked.connect(self.open_selected_estimate)
+        v.estimates_table.doubleClicked.connect(lambda _i: self.open_selected_estimate())
         v.delete_estimate_btn.clicked.connect(self.delete_estimate)
+        v.deliverable_input.returnPressed.connect(self.add_deliverable)
 
         self.load_roles()
         self.load_clients()
@@ -114,11 +115,12 @@ class EstimatorPresenter(QObject):
             estimate_id, fecha, cliente, proyecto, quote_id, numero = e
             table.insertRow(row)
             table.setItem(row, 0, QTableWidgetItem(str(estimate_id)))
-            table.setItem(row, 1, QTableWidgetItem(fecha))
+            table.setItem(row, 1, QTableWidgetItem(fmt_date(fecha)))
             table.setItem(row, 2, QTableWidgetItem(cliente))
             table.setItem(row, 3, QTableWidgetItem(proyecto))
-            table.setItem(row, 4, QTableWidgetItem(format_quote_number(prefijo, numero) if quote_id else ""))
+            table.setItem(row, 4, QTableWidgetItem(format_quote_number(prefijo, numero) if quote_id else "—"))
         table.blockSignals(False)
+        self.view.estimates_dialog.refresh_empty_state()
 
     def current_type(self):
         """El tipo de estimado es siempre el negocio activo."""
@@ -147,7 +149,8 @@ class EstimatorPresenter(QObject):
         combo = QComboBox()
         combo.addItem("— Sin rol —", userData=None)
         for r in self._roles_for_current_type():
-            combo.addItem(f"{r[1]} (${r[2]:.2f})", userData=r[0])
+            combo.addItem(r[1], userData=r[0])
+            combo.setItemData(combo.count() - 1, f"${r[2]:.2f} por hora", Qt.ItemDataRole.ToolTipRole)
         idx = combo.findData(rol_id) if rol_id is not None else 0
         if idx < 0:
             # Rol de otro tipo o eliminado: lo mostramos igual para no perder el dato
@@ -168,11 +171,9 @@ class EstimatorPresenter(QObject):
         table.setItem(row, COL_FASE, QTableWidgetItem(fase))
         table.setItem(row, COL_ACTIVIDAD, QTableWidgetItem(actividad))
         table.setCellWidget(row, COL_ROL, self._build_role_combo(rol_id, rol_nombre))
-        table.setItem(row, COL_HORAS, QTableWidgetItem(f"{horas:g}"))
-        table.setItem(row, COL_TARIFA, QTableWidgetItem(f"{tarifa:.2f}"))
-        costo_item = QTableWidgetItem("0.00")
-        costo_item.setFlags(costo_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        table.setItem(row, COL_COSTO, costo_item)
+        table.setItem(row, COL_HORAS, numeric_item(f"{horas:g}"))
+        table.setItem(row, COL_TARIFA, numeric_item(f"{tarifa:.2f}"))
+        table.setItem(row, COL_COSTO, numeric_item("0.00", editable=False))
         table.blockSignals(False)
         self.recalculate()
 
@@ -212,7 +213,7 @@ class EstimatorPresenter(QObject):
         row = table.rowCount()
         table.insertRow(row)
         table.setItem(row, COL_GASTO_DESC, QTableWidgetItem(descripcion))
-        table.setItem(row, COL_GASTO_MONTO, QTableWidgetItem(f"{monto:.2f}"))
+        table.setItem(row, COL_GASTO_MONTO, numeric_item(f"{monto:.2f}"))
         table.blockSignals(False)
         self.recalculate()
 
@@ -229,9 +230,13 @@ class EstimatorPresenter(QObject):
         return item
 
     def add_deliverable(self):
-        item = self._add_deliverable_item("Nuevo entregable")
-        self.view.deliverables_list.setCurrentItem(item)
-        self.view.deliverables_list.editItem(item)
+        text = self.view.deliverable_input.text().strip()
+        if not text:
+            self.view.deliverable_input.setFocus()
+            return
+        self._add_deliverable_item(text)
+        self.view.deliverable_input.clear()
+        self.view.deliverable_input.setFocus()
 
     def remove_deliverable(self):
         row = self.view.deliverables_list.currentRow()
@@ -292,7 +297,7 @@ class EstimatorPresenter(QObject):
         for a in activities:
             costo_item = table.item(a["row"], COL_COSTO)
             if costo_item:
-                costo_item.setText(f"{a['horas'] * a['tarifa_hora']:.2f}")
+                costo_item.setText(f"{a['horas'] * a['tarifa_hora']:,.2f}")
         table.blockSignals(False)
 
         acts, exps = self._to_calc(activities, self._read_expenses())
@@ -302,7 +307,7 @@ class EstimatorPresenter(QObject):
         labels["horas_totales"].setText(f"{s.horas_totales:g} h")
         for key in ("costo_horas", "gastos", "contingencia", "margen", "subtotal", "itbms"):
             labels[key].setText(f"${getattr(s, key):,.2f}")
-        self.view.total_label.setText(f"TOTAL: ${s.total:,.2f}")
+        self.view.total_label.setText(f"${s.total:,.2f}")
         return s
 
     # --------------------------------------------------------------- plantillas
@@ -339,7 +344,7 @@ class EstimatorPresenter(QObject):
             return
         self.load_templates()
         self.view.template_combo.setCurrentText(nombre)
-        self.view.show_info(f"Plantilla '{nombre}' guardada.")
+        self.view.show_toast(f"Plantilla '{nombre}' guardada")
 
     def delete_template(self):
         template_id = self.view.template_combo.currentData()
@@ -415,15 +420,16 @@ class EstimatorPresenter(QObject):
             self.selected_estimate_id = self.estimate_model.add_estimate(data)
         return self.selected_estimate_id
 
-    def _reselect(self, estimate_id):
-        table = self.view.estimates_table
-        for row in range(table.rowCount()):
-            if table.item(row, 0).text() == str(estimate_id):
-                table.blockSignals(True)
-                table.selectRow(row)
-                table.blockSignals(False)
-                self.view.delete_estimate_btn.setEnabled(True)
-                return
+    def _refresh_mode(self):
+        """Actualiza título/estado del formulario según el estimado cargado."""
+        if not self.selected_estimate_id:
+            self.view.set_mode(None)
+            return
+        data = self.estimate_model.get_estimate(self.selected_estimate_id)
+        quote_id = data["cotizacion_id"] if data else None
+        if quote_id and not self.estimate_model.quote_exists(quote_id):
+            quote_id = None
+        self.view.set_mode(self.selected_estimate_id, self._quote_code(quote_id) if quote_id else None)
 
     def save_estimate(self):
         data = self._collect_data()
@@ -435,23 +441,29 @@ class EstimatorPresenter(QObject):
             self.view.show_error(f"Error guardando estimado: {e}")
             return
         self.load_estimates()
-        self._reselect(estimate_id)
-        self.view.save_btn.setText("Actualizar Estimado")
-        self.view.show_info(f"Estimado #{estimate_id} guardado")
+        self._refresh_mode()
+        self.view.show_toast(f"Estimado #{estimate_id} guardado")
 
-    def on_estimate_selected(self):
-        selected = self.view.estimates_table.selectedItems()
-        if not selected:
+    # ------------------------------------------------------- abrir/eliminar
+    def open_estimates_dialog(self):
+        self.load_estimates()
+        self.view.estimates_dialog.search_input.clear()
+        self.view.estimates_dialog.exec()
+
+    def open_selected_estimate(self):
+        estimate_id = self.view.estimates_dialog.selected_id()
+        if estimate_id is None:
             return
-        row = selected[0].row()
-        estimate_id = int(self.view.estimates_table.item(row, 0).text())
+        self.view.estimates_dialog.accept()
+        self.load_estimate(estimate_id)
+
+    def load_estimate(self, estimate_id):
         data = self.estimate_model.get_estimate(estimate_id)
         if not data:
             return
         self._fill_form(data)
         self.selected_estimate_id = estimate_id
-        self.view.save_btn.setText("Actualizar Estimado")
-        self.view.delete_estimate_btn.setEnabled(True)
+        self._refresh_mode()
 
     def _fill_form(self, data):
         v = self.view
@@ -487,24 +499,27 @@ class EstimatorPresenter(QObject):
         v.activities_table.setRowCount(0)
         v.expenses_table.setRowCount(0)
         v.deliverables_list.clear()
-        v.estimates_table.clearSelection()
-        v.delete_estimate_btn.setEnabled(False)
-        v.save_btn.setText("Guardar Estimado")
+        v.deliverable_input.clear()
+        self.view.set_mode(None)
         self.recalculate()
 
     def delete_estimate(self):
-        if not self.selected_estimate_id:
+        estimate_id = self.view.estimates_dialog.selected_id()
+        if estimate_id is None:
             return
-        if not self.view.ask_yes_no(
-                f"¿Eliminar el estimado #{self.selected_estimate_id}? (La cotización generada, si existe, se conserva)"):
+        if not self.view.estimates_dialog.ask_yes_no(
+                f"¿Eliminar el estimado #{estimate_id}?\n\nLa cotización generada, si existe, se conserva.",
+                "Eliminar estimado"):
             return
         try:
-            self.estimate_model.delete_estimate(self.selected_estimate_id)
+            self.estimate_model.delete_estimate(estimate_id)
         except Exception as e:
             self.view.show_error(f"Error eliminando estimado: {e}")
             return
-        self.clear_form()
+        if estimate_id == self.selected_estimate_id:
+            self.clear_form()
         self.load_estimates()
+        self.view.show_toast(f"Estimado #{estimate_id} eliminado")
 
     # ---------------------------------------------------------------- cotización
     def generate_quote(self):
@@ -549,10 +564,11 @@ class EstimatorPresenter(QObject):
             return
 
         self.load_estimates()
-        self._reselect(estimate_id)
-        self.view.save_btn.setText("Actualizar Estimado")
-        self.quote_generated_signal.emit()
-        self.view.show_info(
-            f"Cotización {self._quote_code(quote_id)} {accion} por ${summary.total:,.2f}.\n"
-            "Puede revisarla, enviarla por correo o WhatsApp desde la pestaña Cotizaciones."
+        self._refresh_mode()
+        code = self._quote_code(quote_id)
+        open_now = self.view.ask_yes_no(
+            f"Cotización {code} {accion} por ${summary.total:,.2f}.\n\n"
+            "¿Desea abrirla ahora para revisarla o enviarla?",
+            "Cotización lista",
         )
+        self.quote_generated_signal.emit(quote_id, open_now)
