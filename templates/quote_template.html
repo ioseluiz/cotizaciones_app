@@ -58,9 +58,10 @@
 <body>
 
     <div class="header">
-        <h1>ING. JOSE LUIS MUÑOZ</h1>
+        {% if logo_url %}<img src="{{ logo_url }}" height="60"><br>{% endif %}
+        <h1>{{ encabezado_nombre }}</h1>
         <h2>{{ tipo }}</h2>
-        <p>RUC: 8-791-273 | D.V. 94</p>
+        {% if ruc %}<p>{{ ruc }}</p>{% endif %}
     </div>
 
     <table class="info-table" width="100%">
@@ -97,6 +98,17 @@
         </tbody>
     </table>
 
+    {% if deliverables %}
+    <table class="obs-table" width="100%">
+        <tr><th>Entregables</th></tr>
+        <tr><td>
+            <ol style="margin: 0;">
+            {% for d in deliverables %}<li>{{ d }}</li>{% endfor %}
+            </ol>
+        </td></tr>
+    </table>
+    {% endif %}
+
     <table class="obs-table" width="100%">
         <tr><th>Observaciones y Condiciones</th></tr>
         <tr><td>{{ observaciones }}</td></tr>
@@ -112,14 +124,14 @@
             <td class="spacer-col"></td>
             <td class="sig-col">
                 <div class="sig-line"></div>
-                <div class="sig-name">Ing. Jose Luis Munoz</div>
+                <div class="sig-name">{{ firma }}</div>
             </td>
             <td class="spacer-col"></td>
         </tr>
     </table>
 
     <div class="footer">
-        Email: joseluism1412@gmail.com | Teléfono: 64998718
+        {% if email %}Email: {{ email }}{% endif %}{% if email and telefono %} | {% endif %}{% if telefono %}Teléfono: {{ telefono }}{% endif %}
     </div>
 
 </body>

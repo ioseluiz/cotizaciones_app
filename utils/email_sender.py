@@ -8,6 +8,18 @@ import keyring
 KEYRING_SERVICE = "CotizacionesApp"
 KEYRING_ACCOUNT = "gmail_app_password"
 
+DEFAULT_BODY = """Estimado cliente,
+
+Adjunto a este correo encontrará la cotización solicitada.
+Quedo a su entera disposición para cualquier consulta.
+
+Saludos cordiales,
+
+Ing. Jose Luis Muñoz
+Tel: 64998718
+Email: joseluism1412@gmail.com
+"""
+
 class EmailSender:
     def __init__(self):
         self.smtp_server = "smtp.gmail.com"
@@ -22,7 +34,7 @@ class EmailSender:
             return ""
         return ""
 
-    def send_email_with_attachment(self, to_email, attachment_path):
+    def send_email_with_attachment(self, to_email, attachment_path, subject=None, body=None):
         if not self.sender_password:
             raise Exception(
                 "No hay una Contraseña de Aplicación configurada. Por favor, configúrala en la pestaña de Configuración."
@@ -31,20 +43,9 @@ class EmailSender:
         msg = MIMEMultipart()
         msg["From"] = self.sender_email
         msg["To"] = to_email
-        msg["Subject"] = "Cotización de Servicios - Ing. Jose Luis Munoz"
+        msg["Subject"] = subject or "Cotización de Servicios - Ing. Jose Luis Munoz"
 
-        body = """
-        Estimado cliente,
-        
-        Adjunto a este correo encontrará la cotización solicitada.
-        Quedo a su entera disposición para cualquier consulta.
-        
-        Saludos cordiales,
-        
-        Ing. Jose Luis Muñoz
-        Tel: 64998718
-        Email: joseluism1412@gmail.com
-        """
+        body = body or DEFAULT_BODY
         msg.attach(MIMEText(body, "plain"))
 
         with open(attachment_path, "rb") as f:

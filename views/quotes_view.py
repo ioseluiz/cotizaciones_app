@@ -47,10 +47,10 @@ class QuotesView(QWidget):
         glayout.addLayout(h_layout1)
 
         h_layout2 = QHBoxLayout()
-        h_layout2.addWidget(QLabel("Tipo:"))
-        self.type_combo = QComboBox()
-        self.type_combo.addItems(["INGENIERO CIVIL", "DESARROLLADOR DE SOFTWARE"])
-        h_layout2.addWidget(self.type_combo)
+        h_layout2.addWidget(QLabel("No.:"))
+        self.number_label = QLabel("(nueva)")
+        self.number_label.setStyleSheet("font-weight: bold;")
+        h_layout2.addWidget(self.number_label)
 
         h_layout2.addWidget(QLabel("Proyecto:"))
         self.project_input = QLineEdit()
@@ -119,9 +119,9 @@ class QuotesView(QWidget):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
-        self.quotes_table = QTableWidget(0, 5)
+        self.quotes_table = QTableWidget(0, 4)
         self.quotes_table.setHorizontalHeaderLabels(
-            ["ID", "Fecha", "Cliente", "Proyecto", "Tipo"]
+            ["No.", "Fecha", "Cliente", "Proyecto"]
         )
         self.quotes_table.horizontalHeader().setSectionResizeMode(
             2, QHeaderView.ResizeMode.Stretch

@@ -15,6 +15,7 @@ build/
 
 # Base de datos (runtime, no commitear)
 *.db
+*.db.bak*
 
 # Configuración local del usuario (rutas absolutas locales)
 config.json

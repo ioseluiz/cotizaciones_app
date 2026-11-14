@@ -1,26 +1,73 @@
 import os
 import json
 import keyring
-from PyQt6.QtCore import QObject
+from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QFileDialog
 from views.settings_view import SettingsView
 from models.database import Database, get_config_path
+from models.business_model import BusinessModel
 
 KEYRING_SERVICE = "CotizacionesApp"
 KEYRING_ACCOUNT = "gmail_app_password"
 
 class SettingsPresenter(QObject):
-    def __init__(self, view: SettingsView, db: Database):
+    business_changed_signal = pyqtSignal()
+
+    def __init__(self, view: SettingsView, db: Database, business_model: BusinessModel = None, context=None):
         super().__init__()
         self.view = view
         self.db = db
+        self.business_model = business_model
+        self.context = context
         
         self.view.move_db_btn.clicked.connect(self.move_db)
         self.view.backup_db_btn.clicked.connect(self.backup_db)
         self.view.save_email_btn.clicked.connect(self.save_email_config)
         
+        self.view.save_business_btn.clicked.connect(self.save_business)
+        self.view.logo_browse_btn.clicked.connect(self.browse_logo)
+        self.view.logo_clear_btn.clicked.connect(self.view.logo_input.clear)
+        if self.context is not None:
+            self.context.changed.connect(lambda _c: self.load_business())
+
         self.update_path_display()
         self.load_email_config()
+        self.load_business()
+
+    def load_business(self):
+        if self.business_model is None or self.context is None:
+            return
+        data = self.business_model.get(self.context.current)
+        if data:
+            self.view.set_business_data(data)
+
+    def browse_logo(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self.view, "Seleccionar logo", "", "Imágenes (*.png *.jpg *.jpeg *.bmp)"
+        )
+        if path:
+            self.view.logo_input.setText(path)
+
+    def save_business(self):
+        data = self.view.get_business_data()
+        if not data["nombre"]:
+            self.view.show_error("El nombre del negocio es obligatorio")
+            return
+        if not data["prefijo"] or not data["prefijo"].isalnum():
+            self.view.show_error("El prefijo es obligatorio y solo puede tener letras y números (ej. EST, SW)")
+            return
+        other = [b for b in self.business_model.get_all() if b[0] != self.context.current]
+        if any((self.business_model.get(b[0]) or {}).get("prefijo") == data["prefijo"] for b in other):
+            self.view.show_error("El prefijo ya lo usa el otro negocio; elija uno distinto")
+            return
+        try:
+            self.business_model.update(self.context.current, data)
+        except Exception as e:
+            self.view.show_error(f"Error guardando los datos del negocio: {e}")
+            return
+        self.load_business()
+        self.business_changed_signal.emit()
+        self.view.show_info("Datos del negocio guardados")
 
     def update_path_display(self):
         self.view.db_path_input.setText(self.db.db_path)

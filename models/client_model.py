@@ -4,18 +4,21 @@ class ClientModel:
     def __init__(self, db: Database):
         self.db = db
 
-    def get_all_clients(self):
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, nombre, email, celular FROM clientes ORDER BY nombre")
-            return cursor.fetchall()
-
-    def add_client(self, nombre, email, celular):
+    def get_all_clients(self, negocio):
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO clientes (nombre, email, celular) VALUES (?, ?, ?)",
-                (nombre, email, celular)
+                "SELECT id, nombre, email, celular FROM clientes WHERE negocio=? ORDER BY nombre",
+                (negocio,),
+            )
+            return cursor.fetchall()
+
+    def add_client(self, negocio, nombre, email, celular):
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO clientes (nombre, email, celular, negocio) VALUES (?, ?, ?, ?)",
+                (nombre, email, celular, negocio)
             )
             conn.commit()
             return cursor.lastrowid
@@ -29,9 +32,14 @@ class ClientModel:
             )
             conn.commit()
 
+    def count_quotes(self, client_id):
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM cotizaciones WHERE cliente_id=?", (client_id,))
+            return cursor.fetchone()[0]
+
     def delete_client(self, client_id):
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            # Idealmente se debería chequear si tiene cotizaciones, pero para mantenerlo simple:
             cursor.execute("DELETE FROM clientes WHERE id=?", (client_id,))
             conn.commit()

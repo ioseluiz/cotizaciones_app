@@ -1,29 +1,46 @@
+import os
 import jinja2
 from PyQt6.QtGui import QTextDocument, QPageLayout, QPageSize, QFont
 from PyQt6.QtPrintSupport import QPrinter
-from PyQt6.QtCore import QMarginsF, QSizeF
+from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
 from utils.resource_path import resource_path
+from models.business_model import format_quote_number
 
 class PDFGenerator:
     def __init__(self):
         template_dir = resource_path('templates')
         self.env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
 
-    def generate(self, quote_data, items_data, output_path):
+    def generate(self, quote_data, items_data, output_path, deliverables=None, business=None):
+        """quote_data: fila de QuoteModel.get_quote_by_id. business: dict de BusinessModel.get."""
         template = self.env.get_template('quote_template.html')
         total = sum(item[3] for item in items_data)
-        
+        business = business or {}
+        prefijo = business.get("prefijo")
+        numero = quote_data[9] if len(quote_data) > 9 and quote_data[9] else quote_data[0]
+        quote_number = format_quote_number(prefijo, numero) if prefijo else str(numero).zfill(4)
+
+        logo_path = business.get("logo_path") or ""
+        logo_url = QUrl.fromLocalFile(logo_path).toString() if logo_path and os.path.exists(logo_path) else ""
+
         html_content = template.render(
-            quote_id=str(quote_data[0]).zfill(4),
+            quote_id=quote_number,
             client_name=quote_data[1],
-            tipo=quote_data[2],
+            tipo=business.get("encabezado_titulo") or quote_data[2],
             fecha=quote_data[3],
             proyecto=quote_data[4],
             observaciones=quote_data[5] if quote_data[5] else "",
             items=items_data,
-            total=f"{total:.2f}"
+            deliverables=deliverables or [],
+            total=f"{total:.2f}",
+            encabezado_nombre=business.get("encabezado_nombre") or "",
+            ruc=business.get("ruc") or "",
+            email=business.get("email") or "",
+            telefono=business.get("telefono") or "",
+            firma=business.get("firma") or "",
+            logo_url=logo_url,
         )
-        
+
         document = QTextDocument()
         document.setDocumentMargin(0)
         

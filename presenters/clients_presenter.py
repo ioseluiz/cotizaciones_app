@@ -6,10 +6,12 @@ from views.clients_view import ClientsView
 class ClientsPresenter(QObject):
     client_changed_signal = pyqtSignal()
 
-    def __init__(self, view: ClientsView, model: ClientModel):
+    def __init__(self, view: ClientsView, model: ClientModel, context):
         super().__init__()
         self.view = view
         self.model = model
+        self.context = context
+        self.context.changed.connect(self.on_business_changed)
         
         self.selected_client_id = None
         
@@ -24,7 +26,7 @@ class ClientsPresenter(QObject):
 
     def load_clients(self):
         self.view.table.setRowCount(0)
-        clients = self.model.get_all_clients()
+        clients = self.model.get_all_clients(self.context.current)
         for row, client in enumerate(clients):
             self.view.table.insertRow(row)
             self.view.table.setItem(row, 0, QTableWidgetItem(str(client[0])))
@@ -41,7 +43,7 @@ class ClientsPresenter(QObject):
             return
             
         try:
-            self.model.add_client(data["nombre"], data["email"], data["celular"])
+            self.model.add_client(self.context.current, data["nombre"], data["email"], data["celular"])
             self.view.clear_form()
             self.load_clients()
             self.view.show_info("Cliente agregado exitosamente")
@@ -69,7 +71,13 @@ class ClientsPresenter(QObject):
     def delete_client(self):
         if not self.selected_client_id:
             return
-            
+
+        n_quotes = self.model.count_quotes(self.selected_client_id)
+        if n_quotes and not self.view.ask_yes_no(
+                f"Este cliente tiene {n_quotes} cotización(es). Si lo elimina, esas cotizaciones "
+                "quedarán sin cliente. ¿Desea continuar?"):
+            return
+
         try:
             self.model.delete_client(self.selected_client_id)
             self.view.clear_form()
@@ -100,3 +108,7 @@ class ClientsPresenter(QObject):
         self.selected_client_id = None
         self.view.clear_form()
         self.view.table.clearSelection()
+
+    def on_business_changed(self, _clave):
+        self.clear_selection()
+        self.load_clients()

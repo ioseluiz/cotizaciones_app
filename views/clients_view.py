@@ -81,3 +81,6 @@ class ClientsView(QWidget):
 
     def show_info(self, message):
         QMessageBox.information(self, "Información", message)
+
+    def ask_yes_no(self, message):
+        return QMessageBox.question(self, "Confirmar", message) == QMessageBox.StandardButton.Yes
