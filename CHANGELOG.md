@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Estimador de proyectos (nueva sección): actividades con horas por tarifa según
+  rol, gastos fijos, entregables, contingencia, margen e ITBMS (7%) con resumen en
+  vivo. Incluye plantillas editables para software e ingeniería estructural y
+  genera la cotización con un ítem por fase.
+- Separación por negocio (Estructural / Software): cotizaciones, estimados,
+  clientes, roles y plantillas filtrados por el negocio activo, con numeración
+  propia (EST-0001, SW-0001). El encabezado del PDF, las condiciones, el correo y
+  el mensaje de WhatsApp se configuran por negocio. Las cotizaciones existentes se
+  migran automáticamente (con respaldo) y conservan su número.
+- Editor de texto con formato (tamaño, negrita, cursiva, subrayado, tachado,
+  color, alineación y listas) en las observaciones de la cotización, las
+  condiciones por defecto de Configuración y las notas del estimador. Al pegar
+  texto se quitan los colores y fondos que no se leen con el tema.
+- Atajos de teclado (Ctrl+N, Ctrl+S, Ctrl+F, Ctrl+1 a Ctrl+4) y avisos breves en
+  la barra de estado.
+
+### Changed
+- Rediseño de la interfaz: tema claro propio (independiente del modo oscuro de
+  Windows) con el color de cada negocio, barra lateral con iconos que se contrae
+  en ventanas angostas, y tablas que se ajustan al tamaño de la ventana.
+- Cotizaciones: lista con buscador, barra de acciones fija y botón "Ver PDF".
+  Clientes en formato lista y ficha; Configuración organizada en pestañas.
+- El PDF usa el color del negocio, fechas en formato dd/mm/aaaa y montos con
+  separador de miles ($1,200.00), igual que en la app.
+- Envío por WhatsApp: se abre directamente WhatsApp Web en lugar de pasar por
+  la página intermedia de wa.me, y el aviso indica Cmd+V para pegar el PDF en Mac.
+
+### Fixed
+- Cotización duplicada al guardar dos veces una cotización nueva.
+- Pérdida de la fecha al editar una cotización.
+- Desplegables con texto blanco sobre fondo blanco y encabezado del calendario
+  ilegible.
+- Ahora se pide confirmación antes de eliminar un cliente que tiene cotizaciones.
+
 ## [1.0.3] - 2026-06-01
 
 ### Changed
