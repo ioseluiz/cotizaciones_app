@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Anexos en el PDF de la cotización: archivos PDF (se agregan tal cual, con el texto
+  nítido), imágenes (una por página, ajustada a la hoja) y páginas de texto con
+  formato escritas en la app. Aparecen al final como "Anexo 1", "Anexo 2"... y se
+  listan en la cotización.
+  - Cada cotización tiene su sección "Anexos del PDF", con orden ajustable.
+  - En Configuración, cada negocio puede tener anexos fijos (portafolio, términos)
+    que se agregan a todas sus cotizaciones; se pueden excluir en una en particular.
+  - Los archivos se copian a la carpeta `anexos/` junto a la base de datos, así el
+    PDF sigue completo aunque el original se mueva o se borre. "Mover base de datos"
+    se lleva también esa carpeta.
+
 ## [1.2.0] - 2026-11-16
 
 ### Added

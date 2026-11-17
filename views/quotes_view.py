@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QDate
 
 from views.rich_text_edit import RichTextEdit, FormattingToolBar
 from views.options_widgets import OptionsDialog
+from views.annex_widgets import AnnexList
 from views.widgets import (
     Page, ResponsiveTable, make_button, make_label, make_search, attach_search, set_role,
 )
@@ -145,6 +146,16 @@ class QuotesView(Page):
         olay.addWidget(self.observations_edit)
         lay.addWidget(obs)
 
+        # Anexos: páginas que se agregan al final del PDF
+        annexes = QGroupBox("Anexos del PDF")
+        alay = QVBoxLayout(annexes)
+        self.annex_hint = make_label("", "muted")
+        self.annex_hint.setWordWrap(True)
+        alay.addWidget(self.annex_hint)
+        self.annex_list = AnnexList()
+        alay.addWidget(self.annex_list)
+        lay.addWidget(annexes)
+
         scroll.setWidget(content)
         outer.addWidget(scroll, 1)
         outer.addWidget(self._build_action_bar())
@@ -176,6 +187,12 @@ class QuotesView(Page):
         self.save_btn.setText("Guardar cambios" if editing else "Guardar")
         for b in (self.delete_quote_btn, self.preview_pdf_btn, self.generate_pdf_btn, self.whatsapp_btn):
             b.setEnabled(editing)
+        self.annex_hint.setText(
+            "PDFs, imágenes o páginas de texto que se agregan al final de la cotización, en este orden. "
+            "Los cambios se guardan al momento."
+            if editing else
+            "Guarde la cotización para agregarle anexos. Los anexos fijos del negocio se incluyen solos."
+        )
 
     def set_count(self, n):
         self.count_label.setText("Sin cotizaciones todavía" if n == 0 else f"{n} cotización(es)")

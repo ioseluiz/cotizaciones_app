@@ -243,6 +243,22 @@ class Database:
                 orden INTEGER DEFAULT 0,
                 FOREIGN KEY (cotizacion_id) REFERENCES cotizaciones (id)
             );
+            CREATE TABLE IF NOT EXISTS anexos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cotizacion_id INTEGER,
+                negocio TEXT,
+                tipo TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                archivo TEXT,
+                contenido TEXT,
+                orden INTEGER DEFAULT 0,
+                FOREIGN KEY (cotizacion_id) REFERENCES cotizaciones (id)
+            );
+            CREATE TABLE IF NOT EXISTS cotizacion_anexos_excluidos (
+                cotizacion_id INTEGER NOT NULL,
+                anexo_id INTEGER NOT NULL,
+                PRIMARY KEY (cotizacion_id, anexo_id)
+            );
             CREATE TABLE IF NOT EXISTS plantillas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT NOT NULL,
@@ -303,6 +319,10 @@ class Database:
         new_path = os.path.join(new_dir, os.path.basename(self.db_path))
         if self.db_path != new_path:
             shutil.copy2(self.db_path, new_path)
+            # Los archivos de anexos viven junto a la base de datos
+            annex_dir = os.path.join(os.path.dirname(os.path.abspath(self.db_path)), "anexos")
+            if os.path.isdir(annex_dir):
+                shutil.copytree(annex_dir, os.path.join(new_dir, "anexos"), dirs_exist_ok=True)
             self.db_path = new_path
             set_db_path(new_path)
 

@@ -140,6 +140,15 @@
     </table>
     {% endif %}
 
+    {% if annex_titles %}
+    <table class="obs-table" width="100%">
+        <tr><th>Anexos</th></tr>
+        <tr><td>
+            {% for t in annex_titles %}Anexo {{ loop.index }}: {{ t }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+        </td></tr>
+    </table>
+    {% endif %}
+
     <table class="obs-table" width="100%">
         <tr><th>Observaciones y Condiciones</th></tr>
         <tr><td>{{ observaciones }}</td></tr>

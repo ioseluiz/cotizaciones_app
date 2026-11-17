@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (
 )
 
 from views.rich_text_edit import RichTextEdit, FormattingToolBar
+from views.annex_widgets import AnnexList
 from views.widgets import Page, make_button, make_label
 
 PLACEHOLDERS_HINT = "Puede usar {cliente}, {proyecto} y {numero}; se reemplazan al enviar."
@@ -114,6 +115,18 @@ class SettingsView(Page):
         clay.addWidget(self.conditions_toolbar)
         clay.addWidget(self.conditions_edit)
         lay.addWidget(cond)
+
+        annexes = QGroupBox("Anexos fijos del PDF")
+        alay = QVBoxLayout(annexes)
+        hint = make_label(
+            "Se agregan al final del PDF de todas las cotizaciones de este negocio (portafolio, términos, "
+            "certificaciones...). Se pueden excluir en una cotización desde su sección Anexos. "
+            "Los cambios se guardan al momento.", "muted")
+        hint.setWordWrap(True)
+        alay.addWidget(hint)
+        self.annex_list = AnnexList()
+        alay.addWidget(self.annex_list)
+        lay.addWidget(annexes)
         lay.addStretch()
         return page
 

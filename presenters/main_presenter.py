@@ -9,6 +9,7 @@ from models.role_model import RoleModel
 from models.estimate_model import EstimateModel
 from models.template_model import TemplateModel
 from models.business_model import BusinessModel
+from models.annex_model import AnnexModel
 
 
 class MainPresenter:
@@ -22,6 +23,7 @@ class MainPresenter:
         self.estimate_model = EstimateModel(db)
         self.template_model = TemplateModel(db)
         self.business_model = BusinessModel(db)
+        self.annex_model = AnnexModel(db)
 
         # Negocio activo compartido por todas las pestañas
         self.context = BusinessContext()
@@ -29,10 +31,11 @@ class MainPresenter:
 
         self.clients_presenter = ClientsPresenter(self.view.clients_view, self.client_model, self.context)
         self.quotes_presenter = QuotesPresenter(
-            self.view.quotes_view, self.quote_model, self.client_model, self.business_model, self.context
+            self.view.quotes_view, self.quote_model, self.client_model, self.business_model, self.context,
+            self.annex_model,
         )
         self.settings_presenter = SettingsPresenter(
-            self.view.settings_view, self.db, self.business_model, self.context
+            self.view.settings_view, self.db, self.business_model, self.context, self.annex_model
         )
         self.estimator_presenter = EstimatorPresenter(
             self.view.estimator_view, self.estimate_model, self.role_model,

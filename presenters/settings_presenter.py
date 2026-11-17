@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QFileDialog
 from views.settings_view import SettingsView
 from models.database import Database, get_config_path
 from models.business_model import BusinessModel
+from presenters.annex_controller import AnnexController
 
 KEYRING_SERVICE = "CotizacionesApp"
 KEYRING_ACCOUNT = "gmail_app_password"
@@ -13,12 +14,14 @@ KEYRING_ACCOUNT = "gmail_app_password"
 class SettingsPresenter(QObject):
     business_changed_signal = pyqtSignal()
 
-    def __init__(self, view: SettingsView, db: Database, business_model: BusinessModel = None, context=None):
+    def __init__(self, view: SettingsView, db: Database, business_model: BusinessModel = None, context=None,
+                 annex_model=None):
         super().__init__()
         self.view = view
         self.db = db
         self.business_model = business_model
         self.context = context
+        self.annexes = AnnexController(view.annex_list, annex_model, view, quote_mode=False) if annex_model else None
         
         self.view.move_db_btn.clicked.connect(self.move_db)
         self.view.backup_db_btn.clicked.connect(self.backup_db)
@@ -40,6 +43,8 @@ class SettingsPresenter(QObject):
         data = self.business_model.get(self.context.current)
         if data:
             self.view.set_business_data(data)
+        if self.annexes:
+            self.annexes.set_owner(self.context.current)
 
     def browse_logo(self):
         path, _ = QFileDialog.getOpenFileName(

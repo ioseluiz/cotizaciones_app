@@ -1,8 +1,10 @@
 import os
+import tempfile
 import jinja2
-from PyQt6.QtGui import QTextDocument, QPageLayout, QPageSize, QFont
+from pypdf import PdfReader, PdfWriter
+from PyQt6.QtGui import QTextDocument, QPageLayout, QPageSize, QFont, QImage, QPainter, QColor
 from PyQt6.QtPrintSupport import QPrinter
-from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
+from PyQt6.QtCore import QMarginsF, QSizeF, QUrl, QRectF, Qt
 from utils.resource_path import resource_path
 from models.business_model import format_quote_number
 from utils.theme import accent_for
@@ -15,10 +17,14 @@ class PDFGenerator:
         self.env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
         self.env.filters["money"] = money
 
-    def generate(self, quote_data, items_data, output_path, deliverables=None, business=None, options=None):
+    def generate(self, quote_data, items_data, output_path, deliverables=None, business=None, options=None,
+                 annexes=None):
         """quote_data: fila de QuoteModel.get_quote_by_id. items_data: filas de get_quote_items
         (id, servicio, descripcion, precio, opcion). business: dict de BusinessModel.get.
-        options: lista de get_quote_options; cada opción se muestra en su propia sección."""
+        options: lista de get_quote_options; cada opción se muestra en su propia sección.
+        annexes: [{"tipo", "titulo", "path", "contenido"}] que se agregan al final como
+        "Anexo 1", "Anexo 2"... (PDF tal cual, imagen en una página, texto con formato)."""
+        annexes = annexes or []
         template = self.env.get_template('quote_template.html')
         options = options or []
         base_items, option_items = split_by_option(
@@ -58,6 +64,7 @@ class PDFGenerator:
             items=base_items,
             options=option_sections,
             deliverables=deliverables or [],
+            annex_titles=[a.get("titulo") or f"Anexo {i + 1}" for i, a in enumerate(annexes)],
             total=money(total),
             encabezado_nombre=business.get("encabezado_nombre") or "",
             ruc=business.get("ruc") or "",
@@ -69,29 +76,113 @@ class PDFGenerator:
             accent_tint=accent["tint"],
         )
 
-        document = QTextDocument()
-        document.setDocumentMargin(0)
-        
-        # Establecemos una fuente base global para que QDocument la use de referencia
-        font = QFont("Helvetica")
-        font.setPointSize(10)
-        document.setDefaultFont(font)
-        
-        # Le pasamos el HTML limpio, QTextDocument ignora mucho CSS como max-width o paddings globales
-        document.setHtml(html_content)
-        
-        # Configurar la impresora sin PrinterMode.HighResolution para mantener proporciones
+        if not annexes:
+            self._print_html(html_content, output_path)
+            return
+
+        # Cotización + anexos: cada parte a un PDF temporal y luego se unen en orden
+        with tempfile.TemporaryDirectory() as tmp:
+            parts = [os.path.join(tmp, "cotizacion.pdf")]
+            self._print_html(html_content, parts[0])
+            for i, annex in enumerate(annexes, start=1):
+                heading = f"Anexo {i}: {annex.get('titulo') or ''}".rstrip(": ")
+                try:
+                    parts.append(self._annex_pdf(annex, heading, os.path.join(tmp, f"anexo_{i}.pdf"),
+                                                 accent["base"], accent["tint"]))
+                except Exception as e:
+                    raise ValueError(f"No se pudo agregar el anexo '{annex.get('titulo')}': {e}") from e
+            self._merge(parts, output_path)
+
+    # ------------------------------------------------------------------ partes
+    @staticmethod
+    def _new_printer(output_path):
+        # Sin PrinterMode.HighResolution para mantener proporciones
         printer = QPrinter()
         printer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
         printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
         printer.setOutputFileName(output_path)
-        
-        # IMPORTANTE: Aquí aplicamos márgenes horizontales reales de 15mm y verticales muy pequeños (2mm)
+        # Márgenes horizontales reales de 15mm y verticales muy pequeños (2mm)
         # QMarginsF(Izquierda, Arriba, Derecha, Abajo)
         printer.setPageMargins(QMarginsF(15, 2, 15, 2), QPageLayout.Unit.Millimeter)
-        
+        return printer
+
+    def _print_html(self, html_content, output_path):
+        document = QTextDocument()
+        document.setDocumentMargin(0)
+
+        # Fuente base global para que QTextDocument la use de referencia
+        font = QFont("Helvetica")
+        font.setPointSize(10)
+        document.setDefaultFont(font)
+
+        # QTextDocument ignora mucho CSS como max-width o paddings globales
+        document.setHtml(html_content)
+
+        printer = self._new_printer(output_path)
         # Ajustamos el tamaño del documento exactamente al área imprimible (papel restando márgenes)
         page_rect = printer.pageLayout().paintRectPixels(printer.resolution())
         document.setPageSize(QSizeF(page_rect.width(), page_rect.height()))
-        
+
         document.print(printer)
+
+    def _annex_pdf(self, annex, heading, output_path, accent, accent_tint):
+        """Devuelve la ruta de un PDF con el anexo listo para unir."""
+        tipo = annex.get("tipo")
+        if tipo == "PDF":
+            path = annex.get("path") or ""
+            if not os.path.exists(path):
+                raise FileNotFoundError("el archivo ya no existe")
+            return path
+        if tipo == "IMAGEN":
+            self._print_image(annex.get("path") or "", heading, output_path, accent)
+            return output_path
+        html = self.env.get_template("annex_template.html").render(
+            heading=heading, contenido=html_body(annex.get("contenido"), keep_style=True),
+            accent=accent, accent_tint=accent_tint,
+        )
+        self._print_html(html, output_path)
+        return output_path
+
+    def _print_image(self, image_path, heading, output_path, accent):
+        image = QImage(image_path)
+        if image.isNull():
+            raise ValueError("no se pudo abrir la imagen")
+        printer = self._new_printer(output_path)
+        # Márgenes más amplios arriba y abajo que en la cotización para el título
+        printer.setPageMargins(QMarginsF(15, 12, 15, 12), QPageLayout.Unit.Millimeter)
+        page = QRectF(printer.pageLayout().paintRectPixels(printer.resolution()))
+        page.moveTo(0, 0)
+        painter = QPainter(printer)
+        try:
+            font = QFont("Helvetica")
+            font.setPixelSize(max(12, int(page.height() * 0.018)))
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor(accent))
+            title_h = painter.fontMetrics().height() * 1.6
+            painter.drawText(QRectF(page.left(), page.top(), page.width(), title_h),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, heading.upper())
+            painter.fillRect(QRectF(page.left(), page.top() + title_h, page.width(), 2), QColor(accent))
+            area = QRectF(page.left(), page.top() + title_h + 12, page.width(), page.height() - title_h - 12)
+            size = image.size().toSizeF()
+            size.scale(area.size(), Qt.AspectRatioMode.KeepAspectRatio)
+            # No agrandar imágenes pequeñas más allá de 2x (se verían pixeladas)
+            if size.width() > image.width() * 2:
+                size = image.size().toSizeF() * 2
+            target = QRectF(area.left() + (area.width() - size.width()) / 2, area.top(), size.width(), size.height())
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.drawImage(target, image)
+        finally:
+            painter.end()
+
+    @staticmethod
+    def _merge(parts, output_path):
+        writer = PdfWriter()
+        for part in parts:
+            reader = PdfReader(part)
+            if reader.is_encrypted:
+                reader.decrypt("")  # PDFs protegidos solo contra edición se pueden leer sin clave
+            for page in reader.pages:
+                writer.add_page(page)
+        with open(output_path, "wb") as f:
+            writer.write(f)

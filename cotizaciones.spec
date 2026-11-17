@@ -29,6 +29,7 @@ a = Analysis(
         'openpyxl',
         'PIL',
         'jinja2',
+        'pypdf',
     ],
     hookspath=[],
     hooksconfig={},

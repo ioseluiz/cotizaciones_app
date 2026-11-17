@@ -10,6 +10,7 @@ from models.client_model import ClientModel
 from models.business_model import BusinessModel, format_quote_number, render_message
 from views.quotes_view import QuotesView, COL_PRECIO, COL_OPCION
 from views.options_widgets import make_option_combo, option_of, rebuild_option_combos, option_label
+from presenters.annex_controller import AnnexController
 from views.widgets import money, parse_number, numeric_item, fmt_date
 from utils.pdf_generator import PDFGenerator
 from utils.email_worker import EmailWorker
@@ -21,7 +22,7 @@ Q_ID, Q_CLIENTE, Q_TIPO, Q_FECHA, Q_PROYECTO, Q_OBS, Q_EMAIL, Q_CELULAR, Q_NEGOC
 class QuotesPresenter(QObject):
     def __init__(
         self, view: QuotesView, quote_model: QuoteModel, client_model: ClientModel,
-        business_model: BusinessModel, context
+        business_model: BusinessModel, context, annex_model=None
     ):
         super().__init__()
         self.view = view
@@ -29,6 +30,8 @@ class QuotesPresenter(QObject):
         self.client_model = client_model
         self.business_model = business_model
         self.context = context
+        self.annex_model = annex_model
+        self.annexes = AnnexController(view.annex_list, annex_model, view, quote_mode=True) if annex_model else None
 
         self.selected_quote_id = None
         self.current_options = []  # [{"nombre", "tipo", "descripcion"}] de la cotización en edición
@@ -236,6 +239,8 @@ class QuotesPresenter(QObject):
         self.view.items_table.setRowCount(0)
         self._set_options([])
         self.view.set_mode(None)
+        if self.annexes:
+            self.annexes.set_owner(self.context.current)
         self.view.quotes_table.blockSignals(True)
         self.view.quotes_table.clearSelection()
         self.view.quotes_table.blockSignals(False)
@@ -280,6 +285,8 @@ class QuotesPresenter(QObject):
         self.calculate_total()
 
         self.view.set_mode(self.quote_code(quote))
+        if self.annexes:
+            self.annexes.set_owner(quote[Q_NEGOCIO], quote_id)
 
     def delete_quote(self):
         if not self.selected_quote_id:
@@ -291,6 +298,8 @@ class QuotesPresenter(QObject):
             return
 
         try:
+            if self.annex_model:
+                self.annex_model.delete_for_quote(self.selected_quote_id)
             self.quote_model.delete_quote(self.selected_quote_id)
             self.clear_form()
             self.load_quotes()
@@ -308,18 +317,26 @@ class QuotesPresenter(QObject):
         if not file_path:
             return None
         try:
-            PDFGenerator().generate(
-                quote,
-                self.quote_model.get_quote_items(quote[Q_ID]),
-                file_path,
-                self.quote_model.get_quote_deliverables(quote[Q_ID]),
-                self.business(quote[Q_NEGOCIO]),
-                self.quote_model.get_quote_options(quote[Q_ID]),
-            )
+            self._generate_pdf(quote, file_path)
         except Exception as e:
             self.view.show_error(f"Error al generar PDF: {str(e)}")
             return None
         return file_path
+
+    def _generate_pdf(self, quote, path):
+        annexes = []
+        if self.annex_model:
+            annexes = [dict(a, path=self.annex_model.file_path(a))
+                       for a in self.annex_model.annexes_for_pdf(quote[Q_ID], quote[Q_NEGOCIO])]
+        PDFGenerator().generate(
+            quote,
+            self.quote_model.get_quote_items(quote[Q_ID]),
+            path,
+            self.quote_model.get_quote_deliverables(quote[Q_ID]),
+            self.business(quote[Q_NEGOCIO]),
+            self.quote_model.get_quote_options(quote[Q_ID]),
+            annexes,
+        )
 
     def _message_values(self, quote):
         return {"cliente": quote[Q_CLIENTE], "proyecto": quote[Q_PROYECTO], "numero": self.quote_code(quote)}
@@ -333,14 +350,7 @@ class QuotesPresenter(QObject):
             return
         path = os.path.join(tempfile.gettempdir(), f"Vista_previa_{self.quote_code(quote)}.pdf")
         try:
-            PDFGenerator().generate(
-                quote,
-                self.quote_model.get_quote_items(quote[Q_ID]),
-                path,
-                self.quote_model.get_quote_deliverables(quote[Q_ID]),
-                self.business(quote[Q_NEGOCIO]),
-                self.quote_model.get_quote_options(quote[Q_ID]),
-            )
+            self._generate_pdf(quote, path)
         except Exception as e:
             self.view.show_error(f"Error al generar la vista previa: {e}")
             return
