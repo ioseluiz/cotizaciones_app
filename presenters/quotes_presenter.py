@@ -380,7 +380,7 @@ class QuotesPresenter(QObject):
             f"{file_path}\n\n"
             "Para enviarlo por WhatsApp:\n"
             "1. Se abrirá WhatsApp Web con el mensaje listo.\n"
-            "2. El PDF ya está copiado: pulse Ctrl+V dentro del chat para adjuntarlo.\n"
+            "2. El PDF ya está copiado: pulse Ctrl+V (Cmd+V en Mac) dentro del chat para adjuntarlo.\n"
             "3. Si no se pega, arrastre el archivo desde la carpeta que se abrió."
         )
 
@@ -393,7 +393,7 @@ class QuotesPresenter(QObject):
 
         mensaje = render_message(self.business(quote[Q_NEGOCIO]).get("whatsapp_mensaje"),
                                  **self._message_values(quote))
-        url = f"https://wa.me/{celular_limpio}?text={urllib.parse.quote(mensaje)}"
+        url = f"https://web.whatsapp.com/send?phone={celular_limpio}&text={urllib.parse.quote(mensaje)}"
 
         # Abrir el navegador por defecto
         QDesktopServices.openUrl(QUrl(url))
