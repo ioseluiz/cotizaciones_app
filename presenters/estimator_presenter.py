@@ -477,7 +477,7 @@ class EstimatorPresenter(QObject):
         v.itbms_check.setChecked(data["aplica_itbms"])
         for w in (v.contingency_spin, v.margin_spin, v.itbms_check):
             w.blockSignals(False)
-        v.notes_edit.setHtml(data["notas"])
+        v.notes_edit.set_clean_html(data["notas"])
 
         v.activities_table.setRowCount(0)
         for a in data["actividades"]:

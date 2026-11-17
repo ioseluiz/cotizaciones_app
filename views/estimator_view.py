@@ -1,10 +1,11 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QComboBox, QDateEdit, QGroupBox,
-    QListWidget, QDoubleSpinBox, QCheckBox, QScrollArea, QTextEdit, QFrame, QDialog, QSizePolicy,
+    QListWidget, QDoubleSpinBox, QCheckBox, QScrollArea, QFrame, QDialog, QSizePolicy,
     QAbstractItemView,
 )
 from PyQt6.QtCore import Qt, QDate
 
+from views.rich_text_edit import RichTextEdit, FormattingToolBar
 from views.widgets import (
     Page, ViewHelpers, ResponsiveTable, make_button, make_label, make_search, attach_search, set_role,
 )
@@ -215,13 +216,15 @@ class EstimatorView(Page):
         # Notas
         notes = QGroupBox("Notas para la cotización")
         nlay = QVBoxLayout(notes)
-        self.notes_edit = QTextEdit()
+        self.notes_edit = RichTextEdit()
         self.notes_edit.setAcceptRichText(True)
         self.notes_edit.setPlaceholderText(
             "Alcance, supuestos o exclusiones. Se agregan a las observaciones junto con las condiciones del negocio."
         )
-        self.notes_edit.setMinimumHeight(70)
-        self.notes_edit.setMaximumHeight(120)
+        self.notes_edit.setMinimumHeight(90)
+        self.notes_edit.setMaximumHeight(170)
+        self.notes_toolbar = FormattingToolBar(self.notes_edit)
+        nlay.addWidget(self.notes_toolbar)
         nlay.addWidget(self.notes_edit)
         lay.addWidget(notes)
         lay.addStretch()
