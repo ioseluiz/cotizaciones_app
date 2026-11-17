@@ -63,4 +63,11 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: pytest -q tests
+        shell: bash
+        run: |
+          set +e
+          pytest -q -rfE tests 2>&1 | tee pytest.log
+          status=${PIPESTATUS[0]}
+          # Publicar cada fallo como anotación (visible sin abrir los logs)
+          grep -E "^(FAILED|ERROR) " pytest.log | while read -r line; do echo "::error::$line"; done
+          exit $status

@@ -124,9 +124,10 @@ def test_pdf_con_anexos(db, tmp_path, qapp):
     base_pages = len(PdfReader(plain).pages)
     reader = PdfReader(full)
     assert len(reader.pages) == base_pages + 3 + 1 + 1
-    text = "".join(p.extract_text() or "" for p in reader.pages)
-    assert "Anexo 1: planos" in text  # listado en la cotización
-    assert "ANEXO 3: ALCANCE DETALLADO" in text.upper()
+    # La extracción separa palabras con espacios o saltos de línea según el sistema
+    text = " ".join(" ".join(p.extract_text() or "" for p in reader.pages).split()).upper()
+    assert "ANEXO 1: PLANOS" in text  # listado en la cotización
+    assert "ANEXO 3: ALCANCE DETALLADO" in text
 
 
 def test_pdf_anexo_faltante_da_error_claro(db, tmp_path, qapp):
