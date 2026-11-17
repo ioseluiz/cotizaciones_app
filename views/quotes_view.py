@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QComboBox, QDateEdit, QTextEdit,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QComboBox, QDateEdit,
     QGroupBox, QSplitter, QFrame, QScrollArea, QWidget, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QDate
 
+from views.rich_text_edit import RichTextEdit, FormattingToolBar
 from views.widgets import (
     Page, ResponsiveTable, make_button, make_label, make_search, attach_search, set_role,
 )
@@ -128,11 +129,13 @@ class QuotesView(Page):
         # Observaciones
         obs = QGroupBox("Observaciones y condiciones")
         olay = QVBoxLayout(obs)
-        self.observations_edit = QTextEdit()
+        self.observations_edit = RichTextEdit()
         self.observations_edit.setAcceptRichText(True)
         self.observations_edit.setPlaceholderText("Condiciones, forma de pago, validez, alcance...")
         self.observations_edit.setMinimumHeight(90)
         self.observations_edit.setMaximumHeight(170)
+        self.observations_toolbar = FormattingToolBar(self.observations_edit)
+        olay.addWidget(self.observations_toolbar)
         olay.addWidget(self.observations_edit)
         lay.addWidget(obs)
 

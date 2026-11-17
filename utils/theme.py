@@ -193,6 +193,16 @@ QListWidget::item {{ padding: 5px 4px; border-radius: 4px; }}
 QListWidget::item:selected {{ background: {a['soft']}; color: {TEXT}; }}
 QCheckBox {{ spacing: 8px; }}
 
+/* ---------- Barra de formato ---------- */
+QToolBar {{ background: {SURFACE_ALT}; border: 1px solid {BORDER}; border-radius: 6px; padding: 2px; spacing: 2px; }}
+QToolBar::separator {{ background: {BORDER}; width: 1px; margin: 4px 4px; }}
+QToolBar QToolButton {{ background: transparent; border: 1px solid transparent; border-radius: 4px;
+    padding: 3px 7px; color: {TEXT}; }}
+QToolBar QToolButton:hover {{ background: {SURFACE}; border: 1px solid {BORDER}; }}
+QToolBar QToolButton:checked {{ background: {a['soft']}; color: {a['base']}; border: 1px solid {a['base']}; }}
+QToolBar QToolButton::menu-indicator {{ image: none; width: 0; }}
+QToolBar QComboBox {{ padding: 2px 6px; min-width: 52px; }}
+
 /* ---------- Botones ---------- */
 QPushButton {{
     background: {SURFACE}; border: 1px solid {BORDER_STRONG}; border-radius: 6px;

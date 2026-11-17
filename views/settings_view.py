@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QFrame,
 )
 
+from views.rich_text_edit import RichTextEdit, FormattingToolBar
 from views.widgets import Page, make_button, make_label
 
 PLACEHOLDERS_HINT = "Puede usar {cliente}, {proyecto} y {numero}; se reemplazan al enviar."
@@ -106,9 +107,11 @@ class SettingsView(Page):
         cond = QGroupBox("Condiciones por defecto")
         clay = QVBoxLayout(cond)
         clay.addWidget(make_label("Se cargan en las observaciones de cada cotización nueva.", "muted"))
-        self.conditions_edit = QTextEdit()
+        self.conditions_edit = RichTextEdit()
         self.conditions_edit.setAcceptRichText(True)
         self.conditions_edit.setMinimumHeight(110)
+        self.conditions_toolbar = FormattingToolBar(self.conditions_edit)
+        clay.addWidget(self.conditions_toolbar)
         clay.addWidget(self.conditions_edit)
         lay.addWidget(cond)
         lay.addStretch()
@@ -187,7 +190,7 @@ class SettingsView(Page):
         for key, edit in self.business_inputs.items():
             edit.setText(data.get(key) or "")
         self.logo_input.setText(data.get("logo_path") or "")
-        self.conditions_edit.setHtml(data.get("condiciones") or "")
+        self.conditions_edit.set_clean_html(data.get("condiciones") or "")
         self.email_subject_input.setText(data.get("email_asunto") or "")
         self.email_body_edit.setPlainText(data.get("email_cuerpo") or "")
         self.whatsapp_edit.setPlainText(data.get("whatsapp_mensaje") or "")

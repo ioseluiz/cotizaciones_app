@@ -189,7 +189,7 @@ class QuotesPresenter(QObject):
         self.view.project_input.clear()
         self.view.date_edit.setDate(QDate.currentDate())
         # Las cotizaciones nuevas arrancan con las condiciones por defecto del negocio
-        self.view.observations_edit.setHtml(self.business().get("condiciones") or "")
+        self.view.observations_edit.set_clean_html(self.business().get("condiciones") or "")
         self.view.items_table.setRowCount(0)
         self.calculate_total()
         self.view.set_mode(None)
@@ -220,7 +220,7 @@ class QuotesPresenter(QObject):
         if fecha.isValid():
             self.view.date_edit.setDate(fecha)
         self.view.project_input.setText(quote[Q_PROYECTO])
-        self.view.observations_edit.setHtml(quote[Q_OBS] if quote[Q_OBS] else "")
+        self.view.observations_edit.set_clean_html(quote[Q_OBS] if quote[Q_OBS] else "")
 
         items = self.quote_model.get_quote_items(self.selected_quote_id)
         self.view.items_table.blockSignals(True)
