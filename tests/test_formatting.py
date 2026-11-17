@@ -16,3 +16,13 @@ def test_parse_number_acepta_formatos_de_la_ui():
     assert parse_number("$1,234.50") == 1234.5
     assert parse_number("8,5") == 8.5
     assert parse_number("") == 0.0
+
+
+def test_html_body_quita_documento_de_qtextedit():
+    from utils.formatting import html_body
+    doc = ('<!DOCTYPE HTML><html><head><style type="text/css">p, li { white-space: pre-wrap; }</style></head>'
+           '<body style=" font-family:\'Segoe UI\';">\n<p><b>Hola</b></p></body></html>')
+    assert html_body(doc) == "<p><b>Hola</b></p>"
+    assert html_body("<p>simple</p>") == "<p>simple</p>"
+    assert html_body(None) == ""
+    assert html_body(doc, keep_style=True) == "<div style=\"font-family:'Segoe UI';\"><p><b>Hola</b></p></div>"

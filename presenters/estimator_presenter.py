@@ -1,4 +1,3 @@
-import re
 from PyQt6.QtCore import QObject, Qt, QDate, pyqtSignal
 from PyQt6.QtWidgets import QTableWidgetItem, QComboBox, QListWidgetItem
 
@@ -8,7 +7,8 @@ from models.quote_model import QuoteModel
 from models.role_model import RoleModel
 from models.template_model import TemplateModel
 from models.business_model import BusinessModel, format_quote_number
-from utils.estimate_calculator import Activity, Expense, calculate, build_quote_items
+from utils.estimate_calculator import Activity, Expense, OPTION_TYPES, build_quote_groups
+from utils.formatting import money, html_body
 from views.estimator_view import (
     EstimatorView,
     COL_FASE,
@@ -19,19 +19,16 @@ from views.estimator_view import (
     COL_COSTO,
     COL_GASTO_DESC,
     COL_GASTO_MONTO,
+    COL_GASTO_OPCION,
+    COL_OPCION,
 )
+from views.options_widgets import make_option_combo, option_of, rebuild_option_combos
 from views.roles_dialog import RolesDialog
 from views.widgets import numeric_item, parse_number, fmt_date
 
 
 def _to_float(text):
     return parse_number(text)
-
-
-def _html_body(html):
-    """Extrae el contenido del <body> de un documento HTML de QTextEdit."""
-    m = re.search(r"<body[^>]*>(.*)</body>", html or "", re.S | re.I)
-    return m.group(1).strip() if m else (html or "")
 
 
 class EstimatorPresenter(QObject):
@@ -78,12 +75,13 @@ class EstimatorPresenter(QObject):
         v.estimates_table.doubleClicked.connect(lambda _i: self.open_selected_estimate())
         v.delete_estimate_btn.clicked.connect(self.delete_estimate)
         v.deliverable_input.returnPressed.connect(self.add_deliverable)
+        v.options_editor.changed.connect(self.on_options_changed)
 
         self.load_roles()
         self.load_clients()
         self.load_templates()
         self.load_estimates()
-        self.recalculate()
+        self.on_options_changed()  # oculta las columnas "Opción" y calcula el resumen
 
     # ------------------------------------------------------------------ carga
     def load_clients(self):
@@ -161,7 +159,8 @@ class EstimatorPresenter(QObject):
         combo.currentIndexChanged.connect(lambda _i, c=combo: self.on_role_changed(c))
         return combo
 
-    def add_activity_row(self, fase="", actividad="", rol_id=None, horas=0.0, tarifa=None, rol_nombre=""):
+    def add_activity_row(self, fase="", actividad="", rol_id=None, horas=0.0, tarifa=None, rol_nombre="",
+                         opcion=None):
         table = self.view.activities_table
         table.blockSignals(True)
         row = table.rowCount()
@@ -174,6 +173,7 @@ class EstimatorPresenter(QObject):
         table.setItem(row, COL_HORAS, numeric_item(f"{horas:g}"))
         table.setItem(row, COL_TARIFA, numeric_item(f"{tarifa:.2f}"))
         table.setItem(row, COL_COSTO, numeric_item("0.00", editable=False))
+        table.setCellWidget(row, COL_OPCION, self._option_combo(opcion))
         table.blockSignals(False)
         self.recalculate()
 
@@ -207,13 +207,14 @@ class EstimatorPresenter(QObject):
         self.load_templates()
 
     # ----------------------------------------------------- gastos/entregables
-    def add_expense_row(self, descripcion="", monto=0.0):
+    def add_expense_row(self, descripcion="", monto=0.0, opcion=None):
         table = self.view.expenses_table
         table.blockSignals(True)
         row = table.rowCount()
         table.insertRow(row)
         table.setItem(row, COL_GASTO_DESC, QTableWidgetItem(descripcion))
         table.setItem(row, COL_GASTO_MONTO, numeric_item(f"{monto:.2f}"))
+        table.setCellWidget(row, COL_GASTO_OPCION, self._option_combo(opcion))
         table.blockSignals(False)
         self.recalculate()
 
@@ -243,6 +244,23 @@ class EstimatorPresenter(QObject):
         if row >= 0:
             self.view.deliverables_list.takeItem(row)
 
+    # ---------------------------------------------------------------- opciones
+    def _option_combo(self, opcion=None):
+        return make_option_combo(self.view.options_editor.names(), opcion, self.recalculate)
+
+    def on_options_changed(self):
+        """Opción agregada, quitada, renombrada o con otro tipo: refrescar combos y resumen."""
+        editor = self.view.options_editor
+        names = editor.names()
+        index_map = editor.take_index_map()
+        rebuild_option_combos(self.view.activities_table, COL_OPCION, names, index_map, self.recalculate)
+        rebuild_option_combos(self.view.expenses_table, COL_GASTO_OPCION, names, index_map, self.recalculate)
+        self.view.show_option_columns(bool(names))
+        self.recalculate()
+
+    def _read_options(self):
+        return self.view.options_editor.options()
+
     # ---------------------------------------------------------------- lectura
     def _read_activities(self):
         """Devuelve lista de dicts con las actividades válidas de la tabla."""
@@ -263,6 +281,7 @@ class EstimatorPresenter(QObject):
                 "rol": rol_nombre,
                 "horas": _to_float(text(COL_HORAS)),
                 "tarifa_hora": _to_float(text(COL_TARIFA)),
+                "opcion": option_of(table, row, COL_OPCION),
             })
         return result
 
@@ -275,7 +294,8 @@ class EstimatorPresenter(QObject):
             desc = desc_item.text().strip() if desc_item else ""
             monto = _to_float(monto_item.text()) if monto_item else 0.0
             if desc or monto:
-                result.append({"descripcion": desc or "Gasto", "monto": monto})
+                result.append({"descripcion": desc or "Gasto", "monto": monto,
+                               "opcion": option_of(table, row, COL_GASTO_OPCION)})
         return result
 
     def _read_deliverables(self):
@@ -284,9 +304,9 @@ class EstimatorPresenter(QObject):
 
     @staticmethod
     def _to_calc(activities, expenses):
-        acts = [Activity(a["fase"], a["actividad"], a["horas"], a["tarifa_hora"], a["rol"])
+        acts = [Activity(a["fase"], a["actividad"], a["horas"], a["tarifa_hora"], a["rol"], a.get("opcion"))
                 for a in activities if a["actividad"] or a["horas"]]
-        exps = [Expense(e["descripcion"], e["monto"]) for e in expenses]
+        exps = [Expense(e["descripcion"], e["monto"], e.get("opcion")) for e in expenses]
         return acts, exps
 
     # ----------------------------------------------------------------- cálculo
@@ -301,13 +321,19 @@ class EstimatorPresenter(QObject):
         table.blockSignals(False)
 
         acts, exps = self._to_calc(activities, self._read_expenses())
-        s = calculate(acts, exps, self.view.contingency_spin.value(),
-                      self.view.margin_spin.value(), self.view.itbms_check.isChecked())
+        groups = build_quote_groups(acts, exps, self._read_options(), self.view.contingency_spin.value(),
+                                    self.view.margin_spin.value(), self.view.itbms_check.isChecked())
+        s = groups["base"]["summary"]
         labels = self.view.summary_labels
         labels["horas_totales"].setText(f"{s.horas_totales:g} h")
         for key in ("costo_horas", "gastos", "contingencia", "margen", "subtotal", "itbms"):
             labels[key].setText(f"${getattr(s, key):,.2f}")
         self.view.total_label.setText(f"${s.total:,.2f}")
+        self.view.set_options_summary([
+            (g["nombre"] or f"Opción {i + 1}", OPTION_TYPES.get(g["tipo"], g["tipo"]),
+             money(g["summary"].total), money(s.total + g["summary"].total))
+            for i, g in enumerate(groups["opciones"])
+        ])
         return s
 
     # --------------------------------------------------------------- plantillas
@@ -396,8 +422,21 @@ class EstimatorPresenter(QObject):
             if a["horas"] < 0 or a["tarifa_hora"] < 0:
                 self.view.show_error(f"La actividad '{a['actividad']}' tiene horas o tarifa negativas.")
                 return None
-        if not activities:
-            self.view.show_error("Debe agregar al menos una actividad")
+        expenses = self._read_expenses()
+        options = self._read_options()
+        for i, o in enumerate(options):
+            if not o["nombre"]:
+                self.view.show_error(f"La opción {i + 1} no tiene nombre.")
+                return None
+            used = any(r.get("opcion") == i for r in activities + expenses)
+            if not used:
+                self.view.show_error(
+                    f"La opción '{o['nombre']}' no tiene actividades ni gastos asignados.\n\n"
+                    "Asígnele filas en la columna \"Opción\" o quítela."
+                )
+                return None
+        if not any(a.get("opcion") is None for a in activities):
+            self.view.show_error("Debe haber al menos una actividad en el alcance base")
             return None
         return {
             "cliente_id": cliente_id,
@@ -409,8 +448,9 @@ class EstimatorPresenter(QObject):
             "aplica_itbms": self.view.itbms_check.isChecked(),
             "notas": self.view.notes_edit.toHtml() if self.view.notes_edit.toPlainText().strip() else "",
             "actividades": activities,
-            "gastos": self._read_expenses(),
+            "gastos": expenses,
             "entregables": self._read_deliverables(),
+            "opciones": options,
         }
 
     def _persist(self, data):
@@ -479,12 +519,15 @@ class EstimatorPresenter(QObject):
             w.blockSignals(False)
         v.notes_edit.set_clean_html(data["notas"])
 
+        # Primero las opciones para que los combos de cada fila las conozcan
         v.activities_table.setRowCount(0)
-        for a in data["actividades"]:
-            self.add_activity_row(a["fase"], a["actividad"], a["rol_id"], a["horas"], a["tarifa_hora"], a["rol"])
         v.expenses_table.setRowCount(0)
+        v.options_editor.set_options(data.get("opciones", []))
+        for a in data["actividades"]:
+            self.add_activity_row(a["fase"], a["actividad"], a["rol_id"], a["horas"], a["tarifa_hora"], a["rol"],
+                                  a.get("opcion"))
         for g in data["gastos"]:
-            self.add_expense_row(g["descripcion"], g["monto"])
+            self.add_expense_row(g["descripcion"], g["monto"], g.get("opcion"))
         v.deliverables_list.clear()
         for d in data["entregables"]:
             self._add_deliverable_item(d)
@@ -500,6 +543,7 @@ class EstimatorPresenter(QObject):
         v.expenses_table.setRowCount(0)
         v.deliverables_list.clear()
         v.deliverable_input.clear()
+        v.options_editor.set_options([])
         self.view.set_mode(None)
         self.recalculate()
 
@@ -533,15 +577,17 @@ class EstimatorPresenter(QObject):
             return
 
         acts, exps = self._to_calc(data["actividades"], data["gastos"])
-        items = build_quote_items(acts, exps, data["contingencia_pct"], data["margen_pct"], data["aplica_itbms"])
-        summary = calculate(acts, exps, data["contingencia_pct"], data["margen_pct"], data["aplica_itbms"])
+        groups = build_quote_groups(acts, exps, data["opciones"], data["contingencia_pct"],
+                                    data["margen_pct"], data["aplica_itbms"])
+        items = groups["base"]["items"] + [it for g in groups["opciones"] for it in g["items"]]
+        summary = groups["base"]["summary"]
 
         observaciones = f"<p><b>Esfuerzo estimado:</b> {summary.horas_totales:g} horas.</p>"
         if data["notas"]:
-            observaciones += _html_body(data["notas"])
+            observaciones += html_body(data["notas"])
         condiciones = self.business().get("condiciones")
         if condiciones:
-            observaciones += _html_body(condiciones)
+            observaciones += html_body(condiciones)
 
         existing = self.estimate_model.get_estimate(estimate_id)["cotizacion_id"]
         if existing and not self.estimate_model.quote_exists(existing):
@@ -552,11 +598,13 @@ class EstimatorPresenter(QObject):
                     "Sí = actualizar esa cotización\nNo = crear una cotización nueva"):
                 quote_id = existing
                 self.quote_model.update_quote(quote_id, data["cliente_id"], data["fecha"],
-                                              data["proyecto"], observaciones, items, data["entregables"])
+                                              data["proyecto"], observaciones, items, data["entregables"],
+                                              data["opciones"])
                 accion = "actualizada"
             else:
                 quote_id = self.quote_model.add_quote(data["tipo"], data["cliente_id"], data["fecha"],
-                                                      data["proyecto"], observaciones, items, data["entregables"])
+                                                      data["proyecto"], observaciones, items, data["entregables"],
+                                                      data["opciones"])
                 accion = "creada"
             self.estimate_model.link_quote(estimate_id, quote_id)
         except Exception as e:
@@ -566,8 +614,9 @@ class EstimatorPresenter(QObject):
         self.load_estimates()
         self._refresh_mode()
         code = self._quote_code(quote_id)
+        extra = f" (base) y {len(data['opciones'])} opción(es)" if data["opciones"] else ""
         open_now = self.view.ask_yes_no(
-            f"Cotización {code} {accion} por ${summary.total:,.2f}.\n\n"
+            f"Cotización {code} {accion} por ${summary.total:,.2f}{extra}.\n\n"
             "¿Desea abrirla ahora para revisarla o enviarla?",
             "Cotización lista",
         )

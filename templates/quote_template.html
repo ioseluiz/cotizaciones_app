@@ -41,6 +41,12 @@
     .total-row { font-weight: bold; background-color: {{ accent_tint }}; font-size: 12px; color: {{ accent }}; }
     .total-row td { text-align: right; border-top: 2px solid {{ accent }}; padding: 6px; }
     
+    .option-title { background-color: {{ accent_tint }}; color: {{ accent }}; font-weight: bold; font-size: 11px;
+        padding: 6px 8px; border: 1px solid {{ accent }}; text-transform: uppercase; }
+    .option-desc { font-size: 10px; color: #4A5568; padding: 4px 8px; border: 1px solid #CBD5E0; }
+    .option-row td { text-align: right; font-size: 11px; padding: 5px 6px; border: 1px solid #CBD5E0; }
+    .approved { font-size: 11px; margin-top: 4px; margin-bottom: 6px; color: #2D3748; }
+
     .obs-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
     .obs-table th { background-color: {{ accent }}; color: white; text-align: left; padding: 4px 8px; font-size: 11px; border: 1px solid {{ accent }}; text-transform: uppercase; }
     .obs-table td { border: 1px solid #CBD5E0; padding: 8px; background-color: #F7FAFC; font-size: 10px; color: #4A5568; }
@@ -81,6 +87,7 @@
 
     <table class="items-table" width="100%">
         <thead>
+            {% if options %}<tr><th colspan="3" style="text-align: left;">SERVICIOS — ALCANCE BASE</th></tr>{% endif %}
             <tr><th style="width: 25%;">Servicio</th><th style="width: 55%;">Descripción</th><th style="width: 20%;">Precio Total</th></tr>
         </thead>
         <tbody>
@@ -88,15 +95,39 @@
             <tr>
                 <td>{{ item[1] }}</td>
                 <td>{{ item[2] }}</td>
-                <td style="text-align: right;">{{ item[3]|money }}</td>
+                <td><p align="right" style="margin: 0;">{{ item[3]|money }}</p></td>
             </tr>
             {% endfor %}
             <tr class="total-row">
-                <td colspan="2">GRAN TOTAL:</td>
+                <td colspan="2">{% if options %}TOTAL BASE:{% else %}GRAN TOTAL:{% endif %}</td>
                 <td>{{ total }}</td>
             </tr>
         </tbody>
     </table>
+
+    {% for opt in options %}
+    <table class="items-table" width="100%">
+        <tbody>
+        <tr><td colspan="3" class="option-title">{{ opt.tipo }}: {{ opt.nombre }}</td></tr>
+        {% if opt.descripcion %}<tr><td colspan="3" class="option-desc">{{ opt.descripcion }}</td></tr>{% endif %}
+        {% for item in opt["items"] %}
+        <tr>
+            <td width="25%">{{ item[1] }}</td>
+            <td width="55%">{{ item[2] }}</td>
+            <td width="20%"><p align="right" style="margin: 0;">{{ item[3]|money }}</p></td>
+        </tr>
+        {% endfor %}
+        <tr class="option-row">
+            <td colspan="2">Precio de la opción:</td>
+            <td>+ {{ opt.precio }}</td>
+        </tr>
+        <tr class="total-row">
+            <td colspan="2">TOTAL CON ESTA OPCIÓN:</td>
+            <td>{{ opt.total }}</td>
+        </tr>
+        </tbody>
+    </table>
+    {% endfor %}
 
     {% if deliverables %}
     <table class="obs-table" width="100%">
@@ -113,6 +144,10 @@
         <tr><th>Observaciones y Condiciones</th></tr>
         <tr><td>{{ observaciones }}</td></tr>
     </table>
+
+    {% if options %}
+    <p class="approved"><b>Opción(es) aprobada(s):</b> ________________________________________________</p>
+    {% endif %}
 
     <table class="signatures" width="100%">
         <tr>

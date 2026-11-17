@@ -1,3 +1,5 @@
+import html
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLineEdit, QComboBox, QDateEdit, QGroupBox,
     QListWidget, QDoubleSpinBox, QCheckBox, QScrollArea, QFrame, QDialog, QSizePolicy,
@@ -6,14 +8,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 
 from views.rich_text_edit import RichTextEdit, FormattingToolBar
+from views.options_widgets import OptionsEditor, OPTIONS_HINT
 from views.widgets import (
     Page, ViewHelpers, ResponsiveTable, make_button, make_label, make_search, attach_search, set_role,
 )
 
 # Columnas de la tabla de actividades
-COL_FASE, COL_ACTIVIDAD, COL_ROL, COL_HORAS, COL_TARIFA, COL_COSTO = range(6)
+COL_FASE, COL_ACTIVIDAD, COL_ROL, COL_HORAS, COL_TARIFA, COL_COSTO, COL_OPCION = range(7)
 # Columnas de la tabla de gastos
-COL_GASTO_DESC, COL_GASTO_MONTO = range(2)
+COL_GASTO_DESC, COL_GASTO_MONTO, COL_GASTO_OPCION = range(3)
 
 
 class EstimatesDialog(QDialog, ViewHelpers):
@@ -149,9 +152,12 @@ class EstimatorView(Page):
         tpl_row.addWidget(self.delete_template_btn)
         alay.addLayout(tpl_row)
 
-        self.activities_table = ResponsiveTable(0, 6, ["Fase", "Actividad", "Rol", "Horas", "Tarifa/h", "Costo"])
+        self.activities_table = ResponsiveTable(
+            0, 7, ["Fase", "Actividad", "Rol", "Horas", "Tarifa/h", "Costo", "Opción"]
+        )
         self.activities_table.set_modes({
             COL_FASE: 120, COL_ACTIVIDAD: "stretch", COL_ROL: 190, COL_HORAS: 64, COL_TARIFA: 80, COL_COSTO: 90,
+            COL_OPCION: 130,
         })
         self.activities_table.set_hide_rules([(COL_TARIFA, 620)])
         self.activities_table.set_proportional(COL_FASE, 0.17, 90, 150)
@@ -170,6 +176,16 @@ class EstimatorView(Page):
         alay.addLayout(act_btns)
         lay.addWidget(act)
 
+        # Opciones para el cliente (adicionales / alternativas)
+        opts = QGroupBox("Opciones para el cliente")
+        olay = QVBoxLayout(opts)
+        hint = make_label(OPTIONS_HINT, "muted")
+        hint.setWordWrap(True)
+        olay.addWidget(hint)
+        self.options_editor = OptionsEditor()
+        olay.addWidget(self.options_editor)
+        lay.addWidget(opts)
+
         # Gastos fijos y entregables (lado a lado; se apilan si no caben)
         extras = QWidget()
         self.extras_layout = QHBoxLayout(extras)
@@ -178,8 +194,8 @@ class EstimatorView(Page):
 
         exp = QGroupBox("Gastos fijos")
         elay = QVBoxLayout(exp)
-        self.expenses_table = ResponsiveTable(0, 2, ["Descripción", "Monto"])
-        self.expenses_table.set_modes({COL_GASTO_DESC: "stretch", COL_GASTO_MONTO: 100})
+        self.expenses_table = ResponsiveTable(0, 3, ["Descripción", "Monto", "Opción"])
+        self.expenses_table.set_modes({COL_GASTO_DESC: "stretch", COL_GASTO_MONTO: 100, COL_GASTO_OPCION: 120})
         self.expenses_table.setMinimumHeight(110)
         elay.addWidget(self.expenses_table)
         exp_btns = QHBoxLayout()
@@ -303,10 +319,19 @@ class EstimatorView(Page):
         total_box.setObjectName("card")
         tlay = QVBoxLayout(total_box)
         tlay.setContentsMargins(12, 10, 12, 10)
-        tlay.addWidget(make_label("Total a cotizar", "muted"))
+        self.total_caption = make_label("Total a cotizar", "muted")
+        tlay.addWidget(self.total_caption)
         self.total_label = make_label("$0.00", "total")
         tlay.addWidget(self.total_label)
         lay.addWidget(total_box)
+
+        # Una línea por opción: precio y total resultante (lo llena el presenter)
+        self.options_summary_title = make_label("Opciones", "subtitle")
+        lay.addWidget(self.options_summary_title)
+        self.options_summary = QGridLayout()
+        self.options_summary.setVerticalSpacing(4)
+        self.options_summary.setColumnStretch(0, 1)
+        lay.addLayout(self.options_summary)
         lay.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll, 1)
@@ -345,6 +370,27 @@ class EstimatorView(Page):
             self.status_chip.setText(f"Cotización {quote_code}" if quote_code else "Sin cotización")
             set_role(self.status_chip, "chip-edit" if not quote_code else "chip")
         self.generate_quote_btn.setText("Actualizar cotización" if quote_code else "Generar cotización")
+
+    def set_options_summary(self, rows):
+        """rows: [(nombre, tipo_legible, precio, total)] ya formateados."""
+        while self.options_summary.count():
+            item = self.options_summary.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)  # quitarlo ya, no esperar al deleteLater
+        self.options_summary_title.setVisible(bool(rows))
+        self.total_caption.setText("Total base" if rows else "Total a cotizar")
+        for i, (nombre, tipo, precio, total) in enumerate(rows):
+            name = make_label(f"{html.escape(nombre)}<br><span style='color:#64748B;font-size:8pt'>{tipo}</span>")
+            name.setWordWrap(True)
+            self.options_summary.addWidget(name, i, 0)
+            amounts = make_label(f"+{precio}<br><b>{total}</b>", "amount")
+            amounts.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            amounts.setToolTip("Precio de la opción y total con esta opción")
+            self.options_summary.addWidget(amounts, i, 1)
+
+    def show_option_columns(self, visible):
+        self.activities_table.setColumnHidden(COL_OPCION, not visible)
+        self.expenses_table.setColumnHidden(COL_GASTO_OPCION, not visible)
 
     def shortcut_targets(self):
         return {"new": self.clear_btn, "save": self.save_btn}

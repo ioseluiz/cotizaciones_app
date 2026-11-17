@@ -11,10 +11,16 @@ Módulo puro (sin Qt ni base de datos) para poder probarlo fácilmente.
     total           = subtotal + itbms
 """
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 ITBMS_RATE = 0.07
 SIN_FASE = "General"
+
+# Tipos de opción para el cliente: un adicional se suma a la base (puede escoger
+# varios); una alternativa cambia parte del alcance (escoge una).
+OPCION_ADICIONAL = "ADICIONAL"
+OPCION_ALTERNATIVA = "ALTERNATIVA"
+OPTION_TYPES = {OPCION_ADICIONAL: "Adicional", OPCION_ALTERNATIVA: "Alternativa"}
 
 
 @dataclass
@@ -24,6 +30,7 @@ class Activity:
     horas: float
     tarifa: float
     rol: str = ""
+    opcion: Optional[int] = None
 
     @property
     def costo(self) -> float:
@@ -34,6 +41,7 @@ class Activity:
 class Expense:
     descripcion: str
     monto: float
+    opcion: Optional[int] = None
 
 
 @dataclass
@@ -122,3 +130,50 @@ def build_quote_items(activities: List[Activity], expenses: List[Expense],
             "precio_total": round(round(summary.total, 2) - round(summary.subtotal, 2), 2),
         })
     return items
+
+
+def build_quote_groups(activities: List[Activity], expenses: List[Expense], opciones: List[dict],
+                       contingencia_pct: float = 0.0, margen_pct: float = 0.0,
+                       aplica_itbms: bool = False) -> dict:
+    """Separa el estimado en alcance base y opciones para el cliente.
+
+    Cada grupo se calcula por separado con los mismos porcentajes, así cada uno
+    cuadra al centavo con su propio ITBMS. Los items salen marcados con `opcion`
+    (None = base). Las filas con un índice de opción inexistente cuentan como base.
+
+        {"base": {"items", "summary"},
+         "opciones": [{"nombre", "tipo", "descripcion", "items", "summary"}]}
+    """
+    n = len(opciones)
+
+    def group_of(row):
+        return row.opcion if row.opcion is not None and 0 <= row.opcion < n else None
+
+    def build(key):
+        acts = [a for a in activities if group_of(a) == key]
+        exps = [e for e in expenses if group_of(e) == key]
+        items = build_quote_items(acts, exps, contingencia_pct, margen_pct, aplica_itbms)
+        for it in items:
+            it["opcion"] = key
+        return {"items": items, "summary": calculate(acts, exps, contingencia_pct, margen_pct, aplica_itbms)}
+
+    result = {"base": build(None), "opciones": []}
+    for i, o in enumerate(opciones):
+        group = build(i)
+        group.update(nombre=o.get("nombre", ""), tipo=o.get("tipo", OPCION_ADICIONAL),
+                     descripcion=o.get("descripcion", ""))
+        result["opciones"].append(group)
+    return result
+
+
+def split_by_option(items, n_options, option=lambda it: it.get("opcion")):
+    """Reparte items de cotización en (base, [items por opción]).
+
+    Funciona con dicts o con filas de BD pasando `option`. Un índice de
+    opción inexistente cuenta como base para no perder montos.
+    """
+    base, groups = [], [[] for _ in range(n_options)]
+    for it in items:
+        k = option(it)
+        (groups[k] if k is not None and 0 <= k < n_options else base).append(it)
+    return base, groups

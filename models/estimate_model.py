@@ -7,10 +7,13 @@ class EstimateModel:
     {
         "cliente_id", "tipo", "proyecto", "fecha", "contingencia_pct",
         "margen_pct", "aplica_itbms", "notas",
-        "actividades": [{"fase", "actividad", "rol_id", "horas", "tarifa_hora"}],
-        "gastos": [{"descripcion", "monto"}],
+        "actividades": [{"fase", "actividad", "rol_id", "horas", "tarifa_hora", "opcion"}],
+        "gastos": [{"descripcion", "monto", "opcion"}],
         "entregables": [str],
+        "opciones": [{"nombre", "tipo", "descripcion"}],
     }
+
+    `opcion` es None para el alcance base o el índice de la opción en "opciones".
     """
 
     def __init__(self, db: Database):
@@ -61,26 +64,32 @@ class EstimateModel:
                 "cotizacion_id": row[8],
             }
             cursor.execute("""
-                SELECT a.fase, a.actividad, a.rol_id, a.horas, a.tarifa_hora, COALESCE(r.nombre, '')
+                SELECT a.fase, a.actividad, a.rol_id, a.horas, a.tarifa_hora, COALESCE(r.nombre, ''), a.opcion
                 FROM estimado_actividades a
                 LEFT JOIN roles r ON a.rol_id = r.id
                 WHERE a.estimado_id=? ORDER BY a.orden, a.id
             """, (estimate_id,))
             data["actividades"] = [
                 {"fase": r[0] or "", "actividad": r[1], "rol_id": r[2], "horas": r[3],
-                 "tarifa_hora": r[4], "rol": r[5]}
+                 "tarifa_hora": r[4], "rol": r[5], "opcion": r[6]}
                 for r in cursor.fetchall()
             ]
             cursor.execute(
-                "SELECT descripcion, monto FROM estimado_gastos WHERE estimado_id=? ORDER BY id",
+                "SELECT descripcion, monto, opcion FROM estimado_gastos WHERE estimado_id=? ORDER BY id",
                 (estimate_id,),
             )
-            data["gastos"] = [{"descripcion": r[0], "monto": r[1]} for r in cursor.fetchall()]
+            data["gastos"] = [{"descripcion": r[0], "monto": r[1], "opcion": r[2]} for r in cursor.fetchall()]
             cursor.execute(
                 "SELECT descripcion FROM estimado_entregables WHERE estimado_id=? ORDER BY orden, id",
                 (estimate_id,),
             )
             data["entregables"] = [r[0] for r in cursor.fetchall()]
+            cursor.execute(
+                "SELECT nombre, tipo, descripcion FROM estimado_opciones WHERE estimado_id=? ORDER BY orden, id",
+                (estimate_id,),
+            )
+            data["opciones"] = [{"nombre": r[0], "tipo": r[1], "descripcion": r[2] or ""}
+                                for r in cursor.fetchall()]
             return data
 
     def add_estimate(self, data):
@@ -141,21 +150,27 @@ class EstimateModel:
 
     @staticmethod
     def _delete_children(cursor, estimate_id):
-        for table in ("estimado_actividades", "estimado_gastos", "estimado_entregables"):
+        for table in ("estimado_actividades", "estimado_gastos", "estimado_entregables", "estimado_opciones"):
             cursor.execute(f"DELETE FROM {table} WHERE estimado_id=?", (estimate_id,))
 
     @staticmethod
     def _insert_children(cursor, estimate_id, data):
         for orden, a in enumerate(data.get("actividades", [])):
             cursor.execute("""
-                INSERT INTO estimado_actividades (estimado_id, fase, actividad, rol_id, horas, tarifa_hora, orden)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO estimado_actividades
+                    (estimado_id, fase, actividad, rol_id, horas, tarifa_hora, orden, opcion)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (estimate_id, a.get("fase", ""), a["actividad"], a.get("rol_id"),
-                  a.get("horas", 0.0), a.get("tarifa_hora", 0.0), orden))
+                  a.get("horas", 0.0), a.get("tarifa_hora", 0.0), orden, a.get("opcion")))
         for g in data.get("gastos", []):
             cursor.execute(
-                "INSERT INTO estimado_gastos (estimado_id, descripcion, monto) VALUES (?, ?, ?)",
-                (estimate_id, g["descripcion"], g.get("monto", 0.0)),
+                "INSERT INTO estimado_gastos (estimado_id, descripcion, monto, opcion) VALUES (?, ?, ?, ?)",
+                (estimate_id, g["descripcion"], g.get("monto", 0.0), g.get("opcion")),
+            )
+        for orden, o in enumerate(data.get("opciones", [])):
+            cursor.execute(
+                "INSERT INTO estimado_opciones (estimado_id, nombre, tipo, descripcion, orden) VALUES (?, ?, ?, ?, ?)",
+                (estimate_id, o["nombre"], o.get("tipo", "ADICIONAL"), o.get("descripcion", ""), orden),
             )
         for orden, desc in enumerate(data.get("entregables", [])):
             cursor.execute(

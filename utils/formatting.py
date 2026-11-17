@@ -1,4 +1,5 @@
 """Formatos de montos, fechas y números compartidos por la UI y el PDF (sin Qt)."""
+import re
 
 
 def money(value):
@@ -26,3 +27,20 @@ def parse_number(text):
         return float(t)
     except ValueError:
         return 0.0
+
+
+def html_body(html, keep_style=False):
+    """Contenido del <body> de un documento HTML completo (como el que genera
+    QTextEdit.toHtml); devuelve el texto igual si no es un documento completo.
+
+    Sirve para incrustar ese HTML dentro de otro: el <head> con estilos propios de
+    QTextEdit desalinea el resto del documento al generar el PDF. Con keep_style
+    se conserva el estilo del <body> (tamaño de letra base) en un <div>."""
+    m = re.search(r"<body([^>]*)>(.*)</body>", html or "", re.S | re.I)
+    if not m:
+        return html or ""
+    content = m.group(2).strip()
+    style = re.search(r'style="([^"]*)"', m.group(1))
+    if keep_style and style and style.group(1).strip():
+        return f'<div style="{style.group(1).strip()}">{content}</div>'
+    return content

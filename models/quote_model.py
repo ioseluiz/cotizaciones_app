@@ -5,8 +5,9 @@ from models.seed_data import TIPO_A_TIPO_COTIZACION
 def _insert_items(cursor, quote_id, items):
     for item in items:
         cursor.execute(
-            "INSERT INTO detalles_cotizacion (cotizacion_id, servicio, descripcion, precio_total) VALUES (?, ?, ?, ?)",
-            (quote_id, item['servicio'], item['descripcion'], item['precio_total'])
+            "INSERT INTO detalles_cotizacion (cotizacion_id, servicio, descripcion, precio_total, opcion) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (quote_id, item['servicio'], item['descripcion'], item['precio_total'], item.get('opcion'))
         )
 
 
@@ -45,7 +46,8 @@ class QuoteModel:
         cursor.execute("SELECT COALESCE(MAX(numero), 0) + 1 FROM cotizaciones WHERE negocio=?", (negocio,))
         return cursor.fetchone()[0]
 
-    def add_quote(self, negocio, cliente_id, fecha, proyecto, observaciones, items, entregables=None):
+    def add_quote(self, negocio, cliente_id, fecha, proyecto, observaciones, items, entregables=None,
+                  opciones=None):
         """Crea la cotización con el siguiente número correlativo del negocio."""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
@@ -60,11 +62,14 @@ class QuoteModel:
             _insert_items(cursor, quote_id, items)
             if entregables is not None:
                 self._replace_deliverables(cursor, quote_id, entregables)
+            if opciones is not None:
+                self._replace_options(cursor, quote_id, opciones)
             conn.commit()
             return quote_id
 
-    def update_quote(self, quote_id, cliente_id, fecha, proyecto, observaciones, items, entregables=None):
-        """Si `entregables` es None se conservan los entregables actuales. El negocio y número no cambian."""
+    def update_quote(self, quote_id, cliente_id, fecha, proyecto, observaciones, items, entregables=None,
+                     opciones=None):
+        """Si `entregables` u `opciones` es None se conservan los actuales. El negocio y número no cambian."""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -75,6 +80,8 @@ class QuoteModel:
             _insert_items(cursor, quote_id, items)
             if entregables is not None:
                 self._replace_deliverables(cursor, quote_id, entregables)
+            if opciones is not None:
+                self._replace_options(cursor, quote_id, opciones)
             conn.commit()
 
     def delete_quote(self, quote_id):
@@ -82,6 +89,7 @@ class QuoteModel:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM detalles_cotizacion WHERE cotizacion_id=?", (quote_id,))
             cursor.execute("DELETE FROM cotizacion_entregables WHERE cotizacion_id=?", (quote_id,))
+            cursor.execute("DELETE FROM cotizacion_opciones WHERE cotizacion_id=?", (quote_id,))
             cursor.execute("UPDATE estimados SET cotizacion_id=NULL WHERE cotizacion_id=?", (quote_id,))
             cursor.execute("DELETE FROM cotizaciones WHERE id=?", (quote_id,))
             conn.commit()
@@ -89,8 +97,22 @@ class QuoteModel:
     def get_quote_items(self, quote_id):
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, servicio, descripcion, precio_total FROM detalles_cotizacion WHERE cotizacion_id=?", (quote_id,))
+            cursor.execute(
+                "SELECT id, servicio, descripcion, precio_total, opcion FROM detalles_cotizacion "
+                "WHERE cotizacion_id=? ORDER BY id",
+                (quote_id,),
+            )
             return cursor.fetchall()
+
+    def get_quote_options(self, quote_id):
+        """Opciones de la cotización: [{"nombre", "tipo", "descripcion"}] en orden (índice = `opcion`)."""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT nombre, tipo, descripcion FROM cotizacion_opciones WHERE cotizacion_id=? ORDER BY orden, id",
+                (quote_id,),
+            )
+            return [{"nombre": r[0], "tipo": r[1], "descripcion": r[2] or ""} for r in cursor.fetchall()]
 
     def get_quote_deliverables(self, quote_id):
         with self.db.get_connection() as conn:
@@ -108,4 +130,14 @@ class QuoteModel:
             cursor.execute(
                 "INSERT INTO cotizacion_entregables (cotizacion_id, descripcion, orden) VALUES (?, ?, ?)",
                 (quote_id, desc, orden),
+            )
+
+    @staticmethod
+    def _replace_options(cursor, quote_id, opciones):
+        cursor.execute("DELETE FROM cotizacion_opciones WHERE cotizacion_id=?", (quote_id,))
+        for orden, o in enumerate(opciones):
+            cursor.execute(
+                "INSERT INTO cotizacion_opciones (cotizacion_id, nombre, tipo, descripcion, orden) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (quote_id, o["nombre"], o.get("tipo", "ADICIONAL"), o.get("descripcion", ""), orden),
             )

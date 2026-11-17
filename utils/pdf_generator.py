@@ -6,7 +6,8 @@ from PyQt6.QtCore import QMarginsF, QSizeF, QUrl
 from utils.resource_path import resource_path
 from models.business_model import format_quote_number
 from utils.theme import accent_for
-from utils.formatting import money, fmt_date
+from utils.formatting import money, fmt_date, html_body
+from utils.estimate_calculator import OPTION_TYPES, split_by_option
 
 class PDFGenerator:
     def __init__(self):
@@ -14,10 +15,27 @@ class PDFGenerator:
         self.env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
         self.env.filters["money"] = money
 
-    def generate(self, quote_data, items_data, output_path, deliverables=None, business=None):
-        """quote_data: fila de QuoteModel.get_quote_by_id. business: dict de BusinessModel.get."""
+    def generate(self, quote_data, items_data, output_path, deliverables=None, business=None, options=None):
+        """quote_data: fila de QuoteModel.get_quote_by_id. items_data: filas de get_quote_items
+        (id, servicio, descripcion, precio, opcion). business: dict de BusinessModel.get.
+        options: lista de get_quote_options; cada opción se muestra en su propia sección."""
         template = self.env.get_template('quote_template.html')
-        total = sum(item[3] for item in items_data)
+        options = options or []
+        base_items, option_items = split_by_option(
+            items_data, len(options), option=lambda it: it[4] if len(it) > 4 else None
+        )
+        total = sum(item[3] for item in base_items)
+        option_sections = []
+        for i, (opt, rows) in enumerate(zip(options, option_items)):
+            precio = sum(item[3] for item in rows)
+            option_sections.append({
+                "tipo": OPTION_TYPES.get(opt.get("tipo"), "Opción"),
+                "nombre": opt.get("nombre") or f"Opción {i + 1}",
+                "descripcion": opt.get("descripcion") or "",
+                "items": rows,
+                "precio": money(precio),
+                "total": money(total + precio),
+            })
         business = business or {}
         prefijo = business.get("prefijo")
         numero = quote_data[9] if len(quote_data) > 9 and quote_data[9] else quote_data[0]
@@ -36,8 +54,9 @@ class PDFGenerator:
             tipo=business.get("encabezado_titulo") or quote_data[2],
             fecha=fmt_date(quote_data[3]),
             proyecto=quote_data[4],
-            observaciones=quote_data[5] if quote_data[5] else "",
-            items=items_data,
+            observaciones=html_body(quote_data[5], keep_style=True),
+            items=base_items,
+            options=option_sections,
             deliverables=deliverables or [],
             total=money(total),
             encabezado_nombre=business.get("encabezado_nombre") or "",

@@ -86,6 +86,14 @@ def get_db_path():
     return new_path
 
 
+def _add_missing_columns(cursor, specs):
+    """Agrega columnas a tablas existentes (migración no destructiva)."""
+    for table, column, decl in specs:
+        cursor.execute(f"PRAGMA table_info({table})")
+        if column not in [r[1] for r in cursor.fetchall()]:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def _read_config():
     config_path = get_config_path()
     if os.path.exists(config_path):
@@ -155,6 +163,12 @@ class Database:
             self._init_estimator_tables(cursor)
             self._seed_estimator_data(cursor)
             self._init_business_tables(cursor)
+            # Opciones para el cliente: NULL = alcance base, n = índice de la opción
+            _add_missing_columns(cursor, (
+                ("estimado_actividades", "opcion", "INTEGER"),
+                ("estimado_gastos", "opcion", "INTEGER"),
+                ("detalles_cotizacion", "opcion", "INTEGER"),
+            ))
             conn.commit()
         self._migrate_to_businesses()
 
@@ -210,6 +224,24 @@ class Database:
                 descripcion TEXT NOT NULL,
                 orden INTEGER DEFAULT 0,
                 FOREIGN KEY (estimado_id) REFERENCES estimados (id)
+            );
+            CREATE TABLE IF NOT EXISTS estimado_opciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                estimado_id INTEGER NOT NULL,
+                nombre TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'ADICIONAL',
+                descripcion TEXT,
+                orden INTEGER DEFAULT 0,
+                FOREIGN KEY (estimado_id) REFERENCES estimados (id)
+            );
+            CREATE TABLE IF NOT EXISTS cotizacion_opciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cotizacion_id INTEGER NOT NULL,
+                nombre TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'ADICIONAL',
+                descripcion TEXT,
+                orden INTEGER DEFAULT 0,
+                FOREIGN KEY (cotizacion_id) REFERENCES cotizaciones (id)
             );
             CREATE TABLE IF NOT EXISTS plantillas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,14 +336,11 @@ class Database:
             marks = ", ".join("?" for _ in b)
             cursor.execute(f"INSERT OR IGNORE INTO negocios ({cols}) VALUES ({marks})", tuple(b.values()))
 
-        for table, column, decl in (
+        _add_missing_columns(cursor, (
             ("clientes", "negocio", "TEXT"),
             ("cotizaciones", "negocio", "TEXT"),
             ("cotizaciones", "numero", "INTEGER"),
-        ):
-            cursor.execute(f"PRAGMA table_info({table})")
-            if column not in [r[1] for r in cursor.fetchall()]:
-                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+        ))
 
     def _needs_business_migration(self, cursor):
         cursor.execute("SELECT COUNT(*) FROM clientes WHERE negocio IS NULL")

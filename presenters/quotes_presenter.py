@@ -8,7 +8,8 @@ from PyQt6.QtGui import QDesktopServices, QGuiApplication
 from models.quote_model import QuoteModel
 from models.client_model import ClientModel
 from models.business_model import BusinessModel, format_quote_number, render_message
-from views.quotes_view import QuotesView, COL_PRECIO
+from views.quotes_view import QuotesView, COL_PRECIO, COL_OPCION
+from views.options_widgets import make_option_combo, option_of, rebuild_option_combos, option_label
 from views.widgets import money, parse_number, numeric_item, fmt_date
 from utils.pdf_generator import PDFGenerator
 from utils.email_worker import EmailWorker
@@ -30,6 +31,7 @@ class QuotesPresenter(QObject):
         self.context = context
 
         self.selected_quote_id = None
+        self.current_options = []  # [{"nombre", "tipo", "descripcion"}] de la cotización en edición
 
         self.view.add_item_btn.clicked.connect(self.add_item_row)
         self.view.remove_item_btn.clicked.connect(self.remove_item_row)
@@ -41,6 +43,7 @@ class QuotesPresenter(QObject):
         self.view.generate_pdf_btn.clicked.connect(self.generate_pdf)
         self.view.whatsapp_btn.clicked.connect(self.send_whatsapp)
         self.view.preview_pdf_btn.clicked.connect(self.preview_pdf)
+        self.view.options_btn.clicked.connect(self.edit_options)
         self.context.changed.connect(self.on_business_changed)
 
         self.load_clients()
@@ -120,6 +123,7 @@ class QuotesPresenter(QObject):
         self.view.items_table.setItem(row, 0, QTableWidgetItem(""))
         self.view.items_table.setItem(row, 1, QTableWidgetItem(""))
         self.view.items_table.setItem(row, COL_PRECIO, numeric_item("0.00"))
+        self.view.items_table.setCellWidget(row, COL_OPCION, self._option_combo())
         self.view.items_table.setCurrentCell(row, 0)
         self.view.items_table.editItem(self.view.items_table.item(row, 0))
 
@@ -129,13 +133,42 @@ class QuotesPresenter(QObject):
             self.view.items_table.removeRow(current_row)
             self.calculate_total()
 
-    def calculate_total(self):
+    def calculate_total(self, *_args):
+        """El total mostrado es el del alcance base; las opciones se cotizan aparte."""
         total = 0.0
-        for row in range(self.view.items_table.rowCount()):
-            item = self.view.items_table.item(row, COL_PRECIO)
-            if item:
+        table = self.view.items_table
+        for row in range(table.rowCount()):
+            item = table.item(row, COL_PRECIO)
+            if item and option_of(table, row, COL_OPCION) is None:
                 total += parse_number(item.text())
-        self.view.total_label.setText(money(total))
+        self.view.set_total(money(total), len(self.current_options))
+
+    # ----------------------------------------------------------------- opciones
+    def _option_names(self):
+        return [option_label(i, o["nombre"]) for i, o in enumerate(self.current_options)]
+
+    def _option_combo(self, opcion=None):
+        return make_option_combo(self._option_names(), opcion, self.calculate_total)
+
+    def _set_options(self, options, index_map=None):
+        self.current_options = options
+        rebuild_option_combos(self.view.items_table, COL_OPCION, self._option_names(), index_map,
+                              self.calculate_total)
+        self.view.show_option_column(bool(options))
+        self.calculate_total()
+
+    def edit_options(self):
+        dialog = self.view.make_options_dialog()
+        dialog.editor.set_options(self.current_options)
+        if not dialog.exec():
+            return
+        options = dialog.editor.options()
+        for i, o in enumerate(options):
+            if not o["nombre"]:
+                o["nombre"] = f"Opción {i + 1}"
+        self._set_options(options, dialog.editor.take_index_map())
+        if options:
+            self.view.show_toast("Asigne cada servicio a su opción en la columna \"Opción\" y guarde")
 
     # ------------------------------------------------------------------ guardar
     def save_quote(self):
@@ -159,20 +192,30 @@ class QuotesPresenter(QObject):
             desc = table.item(row, 1).text() if table.item(row, 1) else ""
             precio = parse_number(table.item(row, COL_PRECIO).text()) if table.item(row, COL_PRECIO) else 0.0
             if servicio:
-                items.append({"servicio": servicio, "descripcion": desc, "precio_total": precio})
+                items.append({"servicio": servicio, "descripcion": desc, "precio_total": precio,
+                              "opcion": option_of(table, row, COL_OPCION)})
 
-        if not items:
-            self.view.show_error("Debe agregar al menos un item a la cotización")
+        if not any(it["opcion"] is None for it in items):
+            self.view.show_error("Debe agregar al menos un servicio en el alcance base")
             return
+        for i, o in enumerate(self.current_options):
+            if not any(it["opcion"] == i for it in items):
+                self.view.show_error(
+                    f"La opción '{o['nombre']}' no tiene servicios asignados.\n\n"
+                    "Asígnele servicios en la columna \"Opción\" o quítela con el botón Opciones..."
+                )
+                return
 
         try:
             if self.selected_quote_id:
                 quote_id = self.selected_quote_id
-                self.quote_model.update_quote(quote_id, client_data, fecha, proyecto, observaciones, items)
+                self.quote_model.update_quote(quote_id, client_data, fecha, proyecto, observaciones, items,
+                                              opciones=self.current_options)
                 accion = "actualizada"
             else:
                 quote_id = self.quote_model.add_quote(
-                    self.context.current, client_data, fecha, proyecto, observaciones, items
+                    self.context.current, client_data, fecha, proyecto, observaciones, items,
+                    opciones=self.current_options,
                 )
                 accion = "creada"
             # Quedarse en la cotización guardada para poder enviarla de inmediato
@@ -191,7 +234,7 @@ class QuotesPresenter(QObject):
         # Las cotizaciones nuevas arrancan con las condiciones por defecto del negocio
         self.view.observations_edit.set_clean_html(self.business().get("condiciones") or "")
         self.view.items_table.setRowCount(0)
-        self.calculate_total()
+        self._set_options([])
         self.view.set_mode(None)
         self.view.quotes_table.blockSignals(True)
         self.view.quotes_table.clearSelection()
@@ -225,12 +268,15 @@ class QuotesPresenter(QObject):
         items = self.quote_model.get_quote_items(self.selected_quote_id)
         self.view.items_table.blockSignals(True)
         self.view.items_table.setRowCount(0)
+        self.current_options = self.quote_model.get_quote_options(self.selected_quote_id)
         for r, it in enumerate(items):
             self.view.items_table.insertRow(r)
             self.view.items_table.setItem(r, 0, QTableWidgetItem(it[1]))
             self.view.items_table.setItem(r, 1, QTableWidgetItem(it[2]))
             self.view.items_table.setItem(r, COL_PRECIO, numeric_item(f"{it[3]:,.2f}"))
+            self.view.items_table.setCellWidget(r, COL_OPCION, self._option_combo(it[4]))
         self.view.items_table.blockSignals(False)
+        self.view.show_option_column(bool(self.current_options))
         self.calculate_total()
 
         self.view.set_mode(self.quote_code(quote))
@@ -268,6 +314,7 @@ class QuotesPresenter(QObject):
                 file_path,
                 self.quote_model.get_quote_deliverables(quote[Q_ID]),
                 self.business(quote[Q_NEGOCIO]),
+                self.quote_model.get_quote_options(quote[Q_ID]),
             )
         except Exception as e:
             self.view.show_error(f"Error al generar PDF: {str(e)}")
@@ -292,6 +339,7 @@ class QuotesPresenter(QObject):
                 path,
                 self.quote_model.get_quote_deliverables(quote[Q_ID]),
                 self.business(quote[Q_NEGOCIO]),
+                self.quote_model.get_quote_options(quote[Q_ID]),
             )
         except Exception as e:
             self.view.show_error(f"Error al generar la vista previa: {e}")

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Opciones para el cliente dentro de una misma cotización: además del alcance base
+  se pueden ofrecer **adicionales** (se suman a la base; el cliente puede escoger
+  varios) y **alternativas** (cambian parte del alcance; el cliente escoge una).
+  - Estimador: sección "Opciones para el cliente" y columna "Opción" en
+    actividades y gastos. El resumen muestra el total base y, por cada opción, su
+    precio y el total resultante. Cada opción se calcula con la misma
+    contingencia, margen e ITBMS.
+  - Cotizaciones: columna "Opción" en los servicios y botón "Opciones..." para
+    crearlas o editarlas a mano.
+  - PDF: cada opción tiene su propia sección con descripción, servicios, precio y
+    "Total con esta opción", más una línea "Opción(es) aprobada(s)" para firmar.
+    Sin opciones, el PDF se ve igual que antes.
+
+### Fixed
+- PDF: los montos de la columna de precio salían centrados y sin bordes. Las
+  observaciones guardadas desde Cotizaciones incrustaban un documento HTML
+  completo que desalineaba el resto del PDF.
+
 ## [1.1.0] - 2026-11-16
 
 ### Added

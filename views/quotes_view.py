@@ -5,11 +5,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate
 
 from views.rich_text_edit import RichTextEdit, FormattingToolBar
+from views.options_widgets import OptionsDialog
 from views.widgets import (
     Page, ResponsiveTable, make_button, make_label, make_search, attach_search, set_role,
 )
 
-COL_SERVICIO, COL_DESCRIPCION, COL_PRECIO = range(3)
+COL_SERVICIO, COL_DESCRIPCION, COL_OPCION, COL_PRECIO = range(4)
 
 
 class QuotesView(Page):
@@ -110,17 +111,22 @@ class QuotesView(Page):
         # Servicios
         items = QGroupBox("Servicios")
         ilay = QVBoxLayout(items)
-        self.items_table = ResponsiveTable(0, 3, ["Servicio", "Descripción", "Precio"])
-        self.items_table.set_modes({COL_SERVICIO: 170, COL_DESCRIPCION: "stretch", COL_PRECIO: 110})
+        self.items_table = ResponsiveTable(0, 4, ["Servicio", "Descripción", "Opción", "Precio"])
+        self.items_table.set_modes({COL_SERVICIO: 170, COL_DESCRIPCION: "stretch", COL_OPCION: 140, COL_PRECIO: 110})
+        self.items_table.verticalHeader().setDefaultSectionSize(38)
         self.items_table.setMinimumHeight(200)
         ilay.addWidget(self.items_table)
         row = QHBoxLayout()
         self.add_item_btn = make_button("Agregar servicio", "ghost", "plus")
         self.remove_item_btn = make_button("Quitar", "ghost", "minus", "Quitar el servicio seleccionado")
+        self.options_btn = make_button("Opciones...", "ghost", "tag",
+                                       "Opciones para el cliente: adicionales y alternativas")
         row.addWidget(self.add_item_btn)
         row.addWidget(self.remove_item_btn)
+        row.addWidget(self.options_btn)
         row.addStretch()
-        row.addWidget(make_label("Total", "muted"))
+        self.total_caption = make_label("Total", "muted")
+        row.addWidget(self.total_caption)
         self.total_label = make_label("$0.00", "total")
         row.addWidget(self.total_label)
         ilay.addLayout(row)
@@ -176,3 +182,17 @@ class QuotesView(Page):
 
     def shortcut_targets(self):
         return {"new": self.clear_btn, "save": self.save_btn, "search": self.search_input}
+
+    # ------------------------------------------------------------ opciones
+    def make_options_dialog(self):
+        return OptionsDialog(self)
+
+    def show_option_column(self, visible):
+        self.items_table.setColumnHidden(COL_OPCION, not visible)
+
+    def set_total(self, base_text, n_options=0):
+        self.total_label.setText(base_text)
+        if n_options:
+            self.total_caption.setText(f"Total base · + {n_options} opción(es)")
+        else:
+            self.total_caption.setText("Total")
