@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-16
+
 ### Added
 - Estimador de proyectos (nueva sección): actividades con horas por tarifa según
   rol, gastos fijos, entregables, contingencia, margen e ITBMS (7%) con resumen en
